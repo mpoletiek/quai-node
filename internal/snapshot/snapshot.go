@@ -7,9 +7,10 @@
 //
 //	<snapshot name>/zone-0-0/go-quai/chaindata/…
 //
-// Restore streams the download through a SHA-256 hash and the zstd and tar
-// decoders into a staging directory beside the chain data, so it needs the
-// unpacked size free, not the download's on top. Only when the stream ends
+// Restore downloads it over several connections at once and streams it, in
+// order, through a SHA-256 hash and the zstd and tar decoders into a
+// staging directory beside the chain data, so it needs the unpacked size
+// free, not the download's on top. Only when the stream ends
 // with the published checksum are the staged chains moved into place. The
 // node must then run with the Pebble engine (--node.db-engine pebble).
 package snapshot
@@ -203,7 +204,7 @@ func Restore(ctx context.Context, m Manifest, dataDir string, progress func(Prog
 	report := func() {
 		progress(Progress{Downloaded: downloaded.Load(), Total: m.SizeBytes, Written: written.Load(), Started: started})
 	}
-	body := &resumingBody{ctx: ctx, url: m.URL(), total: m.SizeBytes, count: &downloaded}
+	body := download(ctx, m.URL(), m.SizeBytes, &downloaded)
 	defer body.Close()
 	hash := sha256.New()
 	tee := io.TeeReader(body, hash)
@@ -232,7 +233,13 @@ func Restore(ctx context.Context, m Manifest, dataDir string, progress func(Prog
 	if err := untar(dec, staging, m.Contexts, &written); err != nil {
 		return err
 	}
-	// Read to the end of the compressed stream, so the hash covers it all.
+	// Read to the end of the download, so the hash covers it all: the rest
+	// of the zstd stream (the tar's padding), then, once the decoder's
+	// goroutine has stopped reading it, anything after.
+	if _, err := io.Copy(io.Discard, dec); err != nil {
+		return fmt.Errorf("snapshot archive: %w", err)
+	}
+	dec.Close()
 	if _, err := io.Copy(io.Discard, tee); err != nil {
 		return err
 	}
@@ -315,92 +322,6 @@ func untar(r io.Reader, dir string, contexts []string, written *atomic.Int64) er
 			}
 		}
 	}
-}
-
-// resumingBody reads url from start to end, reconnecting with a Range
-// request after a dropped connection, up to a point: a download of hundreds
-// of gigabytes will see some.
-type resumingBody struct {
-	ctx   context.Context
-	url   string
-	total int64
-	count *atomic.Int64 // bytes delivered so far
-	body  io.ReadCloser
-	fails int
-}
-
-var dlClient = &http.Client{} // no overall timeout: the body takes hours
-
-func (r *resumingBody) Read(p []byte) (int, error) {
-	for {
-		if err := r.ctx.Err(); err != nil {
-			return 0, err
-		}
-		if r.body == nil {
-			if err := r.open(); err != nil {
-				if r.fails++; r.fails > 8 {
-					return 0, err
-				}
-				select {
-				case <-time.After(time.Duration(r.fails) * 5 * time.Second):
-				case <-r.ctx.Done():
-					return 0, r.ctx.Err()
-				}
-				continue
-			}
-		}
-		n, err := r.body.Read(p)
-		r.count.Add(int64(n))
-		if n > 0 {
-			r.fails = 0
-		}
-		if err == io.EOF && r.count.Load() >= r.total {
-			return n, io.EOF
-		}
-		if err != nil { // dropped early: reconnect from where it stopped
-			r.body.Close()
-			r.body = nil
-			if n > 0 {
-				return n, nil
-			}
-			if r.fails++; r.fails > 8 {
-				return 0, fmt.Errorf("download stopped at %d of %d bytes: %w", r.count.Load(), r.total, err)
-			}
-			continue
-		}
-		return n, nil
-	}
-}
-
-func (r *resumingBody) open() error {
-	req, err := http.NewRequestWithContext(r.ctx, http.MethodGet, r.url, nil)
-	if err != nil {
-		return err
-	}
-	if at := r.count.Load(); at > 0 {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", at))
-	}
-	resp, err := dlClient.Do(req)
-	if err != nil {
-		return err
-	}
-	want := http.StatusOK
-	if r.count.Load() > 0 {
-		want = http.StatusPartialContent
-	}
-	if resp.StatusCode != want {
-		resp.Body.Close()
-		return fmt.Errorf("snapshot download: HTTP %d", resp.StatusCode)
-	}
-	r.body = resp.Body
-	return nil
-}
-
-func (r *resumingBody) Close() error {
-	if r.body != nil {
-		return r.body.Close()
-	}
-	return nil
 }
 
 // Need is the free space a restore takes: the unpacked size, plus 5% for

@@ -115,7 +115,10 @@ without `--ignore-space`, when the data directory hasn't room for it.
 On mainnet cyprus1 it also offers to start from that snapshot instead of
 syncing from the network (`--snapshot`, or `quai-node snapshot restore`
 later). quikshot.dev is an independent community service, not affiliated
-with the Quai Network team. The download (about 224 GB, zstd) streams
+with the Quai Network team. The download (about 224 GB, zstd) runs over
+16 connections at once, since one gets about 60 MB/s from quikshot.dev and
+together they fill a gigabit line (about 35 minutes instead of an hour),
+and streams, in order,
 through its published SHA-256 into a staging directory beside the chain
 data, so it needs the unpacked size free, not both; nothing is replaced
 until the whole download has checked out, and a dropped connection resumes

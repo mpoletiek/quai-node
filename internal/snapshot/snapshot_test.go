@@ -6,7 +6,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"io"
 	"io/fs"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -54,25 +57,48 @@ func serve(t *testing.T, body []byte, cut int) *httptest.Server {
 	var first atomic.Bool
 	first.Store(true)
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := 0
-		if rg := r.Header.Get("Range"); rg != "" {
-			start, _ = strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(rg, "bytes="), "-"))
-			w.Header().Set("Content-Length", strconv.Itoa(len(body)-start))
-			w.WriteHeader(http.StatusPartialContent)
-		} else {
-			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
-		}
-		part := body[start:]
+		part := ranged(w, r, body)
 		if cut > 0 && first.CompareAndSwap(true, false) {
-			w.Write(part[:cut])
-			if hj, ok := w.(http.Hijacker); ok {
-				c, _, _ := hj.Hijack()
-				c.Close()
-			}
+			w.Write(part[:min(cut, len(part)-1)])
+			hangUp(w)
 			return
 		}
 		w.Write(part)
 	}))
+}
+
+// ranged answers r's "bytes=a-b" or "bytes=a-" Range header, or its lack,
+// with the headers for that part of body, and returns the part.
+func ranged(w http.ResponseWriter, r *http.Request, body []byte) []byte {
+	rg := r.Header.Get("Range")
+	if rg == "" {
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		return body
+	}
+	from, to, _ := strings.Cut(strings.TrimPrefix(rg, "bytes="), "-")
+	start, _ := strconv.Atoi(from)
+	end := len(body) - 1
+	if to != "" {
+		end, _ = strconv.Atoi(to)
+	}
+	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(body)))
+	w.Header().Set("Content-Length", strconv.Itoa(end-start+1))
+	w.WriteHeader(http.StatusPartialContent)
+	return body[start : end+1]
+}
+
+func hangUp(w http.ResponseWriter) {
+	if hj, ok := w.(http.Hijacker); ok {
+		c, _, _ := hj.Hijack()
+		c.Close()
+	}
+}
+
+// small makes downloads use many small chunks and quick retries.
+func small(t *testing.T) {
+	oc, ow, os, or := chunkSize, window, stallTimeout, retryWait
+	chunkSize, window, stallTimeout, retryWait = 1000, 4, 200*time.Millisecond, 10*time.Millisecond
+	t.Cleanup(func() { chunkSize, window, stallTimeout, retryWait = oc, ow, os, or })
 }
 
 func manifestFor(body []byte, url string) Manifest {
@@ -90,6 +116,7 @@ func restore(t *testing.T, srv *httptest.Server, m Manifest, dir string) error {
 }
 
 func TestRestore(t *testing.T) {
+	small(t)
 	body := archive(t)
 	for _, cut := range []int{0, len(body) / 3} {
 		srv := serve(t, body, cut)
@@ -185,4 +212,94 @@ func TestLeftover(t *testing.T) {
 	if _, err := os.Stat(staging(dir)); !os.IsNotExist(err) {
 		t.Fatalf("still there: %v", err)
 	}
+}
+
+func randomBody(n int) []byte {
+	b := make([]byte, n)
+	r := rand.NewChaCha8([32]byte{1})
+	r.Read(b)
+	return b
+}
+
+func fetchAll(t *testing.T, url string, total int) ([]byte, int64, error) {
+	t.Helper()
+	var count atomic.Int64
+	body := download(context.Background(), url, int64(total), &count)
+	defer body.Close()
+	got, err := io.ReadAll(body)
+	return got, count.Load(), err
+}
+
+// The chunks arrive out of order, some cut short, some stalled; the
+// stream comes out whole and in order.
+func TestDownloadInOrder(t *testing.T) {
+	small(t)
+	body := randomBody(50_000)
+	var n atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		i := n.Add(1)
+		part := ranged(w, r, body)
+		time.Sleep(time.Duration(rand.IntN(5)) * time.Millisecond)
+		switch i % 7 {
+		case 3: // dropped partway
+			w.Write(part[:len(part)/2])
+			hangUp(w)
+			return
+		case 5: // stalled partway
+			w.Write(part[:len(part)/3])
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		w.Write(part)
+	}))
+	defer srv.Close()
+	got, count, err := fetchAll(t, srv.URL, len(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, body) {
+		t.Fatalf("got %d bytes, not the body", len(got))
+	}
+	if count != int64(len(body)) {
+		t.Errorf("counted %d bytes received, want %d (a retry resumes, it doesn't start over)", count, len(body))
+	}
+}
+
+func TestDownloadNeedsRanges(t *testing.T) {
+	small(t)
+	body := randomBody(5000)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(body) // 200, the whole file, whatever was asked
+	}))
+	defer srv.Close()
+	if _, _, err := fetchAll(t, srv.URL, len(body)); err == nil || !strings.Contains(err.Error(), "HTTP 200") {
+		t.Fatalf("err = %v, want an HTTP 200 error", err)
+	}
+}
+
+func TestDownloadCancel(t *testing.T) {
+	small(t)
+	body := randomBody(50_000)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(ranged(w, r, body)[:10])
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	var count atomic.Int64
+	b := download(ctx, srv.URL, int64(len(body)), &count)
+	time.AfterFunc(50*time.Millisecond, cancel)
+	done := make(chan error)
+	go func() { _, err := io.ReadAll(b); done <- err }()
+	select {
+	case err := <-done:
+		if err != context.Canceled {
+			t.Errorf("err = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Read didn't return after cancel")
+	}
+	b.Close()
 }
