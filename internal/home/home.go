@@ -7,6 +7,7 @@
 //	  bin/                  go-quai, quai-dash, a copy of quai-node
 //	  VERSION, params/      read by go-quai from its working directory
 //	  config/config.toml    go-quai's config (--global.config-dir)
+//	  config/extra.toml     go-quai keys of the user's own, merged into config.toml
 //	  dash/config.toml      quai-dash's config (--config)
 //	  data/                 chain data (default; setup can move it)
 //	  nodelogs/             written by go-quai in its working directory
@@ -76,6 +77,7 @@ func (h Home) QuaiDash() string    { return filepath.Join(h.BinDir(), exe("quai-
 func (h Home) QuaiNode() string    { return filepath.Join(h.BinDir(), exe("quai-node")) }
 func (h Home) ConfigDir() string   { return filepath.Join(h.Dir, "config") }
 func (h Home) NodeConfig() string  { return filepath.Join(h.ConfigDir(), "config.toml") }
+func (h Home) ExtraConfig() string { return filepath.Join(h.ConfigDir(), "extra.toml") }
 func (h Home) DashDir() string     { return filepath.Join(h.Dir, "dash") }
 func (h Home) DashConfig() string  { return filepath.Join(h.DashDir(), "config.toml") }
 func (h Home) DefaultData() string { return filepath.Join(h.Dir, "data") }

@@ -189,6 +189,7 @@ quai-node.toml        what setup chose; the configs below are written from it
 bin/                  go-quai, quai-dash, quai-node
 VERSION, params/      go-quai reads these from its working directory
 config/config.toml    go-quai's config (and its node key, private.key)
+config/extra.toml     go-quai keys of your own, merged into config.toml
 dash/config.toml      quai-dash's config
 data/                 chain data (setup asks where)
 nodelogs/             go-quai's logs
@@ -196,6 +197,30 @@ nodelogs/             go-quai's logs
 
 go-quai always runs with the home as its working directory: it reads
 `VERSION` and `params/*.json` relative to it and writes `nodelogs/` there.
+
+### Your own go-quai keys
+
+`config/config.toml` is rewritten from `quai-node.toml` whenever setup runs:
+updates, `setup --apply`, `snapshot restore` and `service install` or
+`uninstall`. Edits made to it directly don't last. Put keys of your own
+in `config/extra.toml` instead (setup leaves a commented one there):
+quai-node merges it into `config.toml` on every rewrite. Use go-quai's own
+tables and key names; `go-quai config --global.config-dir DIR`, run from a
+folder holding a copy of the home's `VERSION`, prints them all with their
+defaults.
+
+```toml
+[metrics]
+enabled = true
+
+[node]
+max-peers = '100'
+```
+
+Then `quai-node setup --apply` to rewrite the config and restart the node.
+Setup checks the file first and refuses a table go-quai doesn't have, or a
+key quai-node writes itself (the network, zone, ports, data directory,
+mining and the RPC). Change those in `quai-node.toml`.
 
 ## The service
 

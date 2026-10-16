@@ -71,6 +71,11 @@ func restoreSnapshot(out io.Writer, h home.Home, s *settings.Settings, mgr servi
 	if !snapshotFits(*s) {
 		return errors.New("quikshot.dev's snapshots are for mainnet (colosseum) nodes running cyprus1")
 	}
+	// The engine switch is saved after the download, with extra.toml merged
+	// in: a file Save would refuse is turned away before the chain is touched.
+	if _, err := settings.LoadExtra(h); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	m, err := snapshot.Latest(ctx)
 	cancel()

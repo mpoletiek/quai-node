@@ -74,3 +74,62 @@ func TestValidate(t *testing.T) {
 		t.Error("relative data dir accepted")
 	}
 }
+
+func TestExtra(t *testing.T) {
+	h := home.Home{Dir: t.TempDir()}
+	s := Defaults(h)
+
+	// No extra.toml: Save leaves a commented starter, which adds nothing.
+	if err := Save(h, s); err != nil {
+		t.Fatal(err)
+	}
+	extra, err := LoadExtra(h)
+	if err != nil || len(extra) != 0 {
+		t.Fatalf("starter: %v, %v", extra, err)
+	}
+
+	write := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(h.ExtraConfig(), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("[metrics]\nenabled = true\n\n[node]\nmax-peers = '100'\n")
+	if err := Save(h, s); err != nil {
+		t.Fatal(err)
+	}
+	var node map[string]map[string]any
+	b, _ := os.ReadFile(h.NodeConfig())
+	if err := toml.Unmarshal(b, &node); err != nil {
+		t.Fatal(err)
+	}
+	if node["metrics"]["enabled"] != true || node["node"]["max-peers"] != "100" || node["node"]["environment"] != "colosseum" {
+		t.Errorf("merged config: %v", node)
+	}
+	if got := ExtraNames(map[string]map[string]any{"node": {"max-peers": "100"}, "metrics": {"enabled": true}}); strings.Join(got, " ") != "metrics.enabled node.max-peers" {
+		t.Errorf("ExtraNames = %v", got)
+	}
+	// Save never rewrites extra.toml once it's there.
+	if b, _ := os.ReadFile(h.ExtraConfig()); !strings.HasPrefix(string(b), "[metrics]") {
+		t.Errorf("extra.toml was rewritten:\n%s", b)
+	}
+
+	for body, want := range map[string]string{
+		"[node]\nport = '5000'\n":        "p2p_port",
+		"[rpc]\nhttp-addr = '0.0.0.0'\n": "written by quai-node",
+		"[metric]\nenabled = true\n":     "no [metric] table",
+		"max-peers = '100'\n":            "outside a table",
+		"[node.extra]\nx = 1\n":          "plain keys",
+		"[node]\nmax-peers = \n":         h.ExtraConfig(),
+	} {
+		write(body)
+		before, _ := os.ReadFile(h.NodeConfig())
+		err := Save(h, s)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: Save = %v, want %q", body, err, want)
+		}
+		if after, _ := os.ReadFile(h.NodeConfig()); string(after) != string(before) {
+			t.Errorf("%q: config.toml changed although extra.toml was refused", body)
+		}
+	}
+}

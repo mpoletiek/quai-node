@@ -193,6 +193,11 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
+	// Turned away now rather than halfway through: Save merges it.
+	extra, err := settings.LoadExtra(h)
+	if err != nil {
+		return err
+	}
 	if !interactive && !o.ignoreSpace {
 		if short := spaceShort(s, snap); short != "" {
 			return errors.New(short + " (--ignore-space to set up anyway)")
@@ -228,6 +233,9 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 		}
 		pathNote = putOnPath(out, h, s.Dashboard)
 		fmt.Fprintf(out, "  write %s\n  write %s\n", h.Settings(), h.NodeConfig())
+		if names := settings.ExtraNames(extra); len(names) > 0 {
+			fmt.Fprintf(out, "    with your keys from %s: %s\n", h.ExtraConfig(), strings.Join(names, ", "))
+		}
 		if s.Dashboard {
 			fmt.Fprintf(out, "  write %s\n", h.DashConfig())
 		}

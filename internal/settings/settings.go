@@ -186,10 +186,14 @@ func Load(h home.Home) (Settings, error) {
 	return s, nil
 }
 
-// Save writes quai-node.toml, go-quai's config.toml and, when the dashboard
-// is on, quai-dash's config.toml.
+// Save writes quai-node.toml, go-quai's config.toml (with extra.toml's keys
+// merged in) and, when the dashboard is on, quai-dash's config.toml.
 func Save(h home.Home, s Settings) error {
 	if err := s.Validate(); err != nil {
+		return err
+	}
+	extra, err := LoadExtra(h)
+	if err != nil {
 		return err
 	}
 	for _, d := range []string{h.Dir, h.ConfigDir(), s.DataDir} {
@@ -206,7 +210,12 @@ func Save(h home.Home, s Settings) error {
 	if err := writeFile(h.Settings(), append([]byte(head), b...)); err != nil {
 		return err
 	}
-	if err := writeTOML(h.NodeConfig(), nodeConfigHead, NodeConfig(h, s)); err != nil {
+	node := NodeConfig(h, s)
+	merge(node, extra)
+	if err := writeTOML(h.NodeConfig(), nodeConfigHead, node); err != nil {
+		return err
+	}
+	if err := writeExtraStarter(h); err != nil {
 		return err
 	}
 	if s.Dashboard {
@@ -218,9 +227,10 @@ func Save(h home.Home, s Settings) error {
 	return nil
 }
 
-const nodeConfigHead = `# go-quai config, written by quai-node from quai-node.toml (rewritten by
-# 'quai-node setup'). Keys not here take go-quai's defaults; run
-# 'go-quai config' for the full list.
+const nodeConfigHead = `# go-quai config, written by quai-node from quai-node.toml and extra.toml
+# (rewritten by 'quai-node setup'). Edits here don't last: put keys of your
+# own in extra.toml beside this file. Keys not here take go-quai's defaults;
+# run 'go-quai config' for the full list.
 
 `
 
