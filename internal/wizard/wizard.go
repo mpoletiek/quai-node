@@ -18,8 +18,8 @@ import (
 
 	"github.com/mpoletiek/quai-node/internal/geo"
 	"github.com/mpoletiek/quai-node/internal/home"
+	"github.com/mpoletiek/quai-node/internal/keepers"
 	"github.com/mpoletiek/quai-node/internal/quaiaddr"
-	"github.com/mpoletiek/quai-node/internal/quaination"
 	"github.com/mpoletiek/quai-node/internal/services"
 	"github.com/mpoletiek/quai-node/internal/settings"
 	"github.com/mpoletiek/quai-node/internal/snapshot"
@@ -160,11 +160,11 @@ func Run(s *settings.Settings, info Info) error {
 		}
 	}
 	if s.Network == "colosseum" && s.ZoneOf() == (quaiaddr.Zone{}) {
-		if err := askQuaination(s); err != nil {
+		if err := askKeepers(s); err != nil {
 			return err
 		}
 	} else {
-		s.QuainationTag, s.QuainationSecret = "", ""
+		s.KeepersTag, s.KeepersSecret = "", ""
 	}
 	s.Mining = mode == "mine"
 	if strings.TrimSpace(s.DataDir) == "" {
@@ -513,33 +513,33 @@ func askAccess(s *settings.Settings) error {
 	return nil
 }
 
-// askQuaination asks whether to report to quaination.xyz's Keepers, and
+// askKeepers asks whether to report to the Keepers on quainode.org, and
 // under what tag.
-func askQuaination(s *settings.Settings) error {
+func askKeepers(s *settings.Settings) error {
 	on := s.Reporting()
 	if err := ask(huh.NewGroup(
-		huh.NewNote().Title("quaination.xyz Keepers").Description(
-			"quaination.xyz/nodes lists the Quai nodes that prove they keep the chain, checked every few minutes with a state proof. Reporting there means:\n"+
-				"• go-quai sends its stats (heights, CPU, memory, disk) to quaination.xyz every 15 s, over plain HTTP, under a tag you choose.\n"+
-				"• quaination checks the node by calling its RPC, so the RPC listens on every interface and you open TCP 9200 to the internet (forward it on your router). "+
+		huh.NewNote().Title("Keepers on quainode.org").Description(
+			"quainode.org/nodes lists the Quai nodes that prove they keep the chain, checked every few minutes with a state proof. Reporting there means:\n"+
+				"• go-quai sends its stats (heights, CPU, memory, disk) to keepers.quainode.org every 15 s, over plain HTTP, under a tag you choose.\n"+
+				"• The Keepers check the node by calling its RPC, so the RPC listens on every interface and you open TCP 9200 to the internet (forward it on your router). "+
 				"That makes this node a public RPC: anyone can query it or send it transactions (only the net, web3 and quai APIs: no admin, no wallet).\n"+
 				"• Its P2P port, "+fmt.Sprint(s.P2PPort)+", must be reachable too.\n"+
-				"Once it shows up you can claim it (quai-node quaination claim), which signs your tag with the node's key."),
-		huh.NewConfirm().Title("Report this node to quaination.xyz?").
+				"Once it shows up you can claim it (quai-node keepers claim), which signs your tag with the node's key."),
+		huh.NewConfirm().Title("Report this node to the Keepers on quainode.org?").
 			Affirmative("Yes, report it").Negative("No").Value(&on),
 	)); err != nil {
 		return err
 	}
 	if !on {
-		s.QuainationTag, s.QuainationSecret = "", ""
+		s.KeepersTag, s.KeepersSecret = "", ""
 		return nil
 	}
-	tag := s.QuainationTag
+	tag := s.KeepersTag
 	if tag == "" {
 		tag = suggestTag()
 	}
 	def := tag
-	title := "Your node's tag on quaination.xyz"
+	title := "Your node's tag on quainode.org"
 	if plain() {
 		title += " (Enter for " + def + ")"
 	}
@@ -550,17 +550,17 @@ func askQuaination(s *settings.Settings) error {
 			if strings.TrimSpace(v) == "" && plain() {
 				return nil
 			}
-			return quaination.CheckTag(strings.TrimSpace(v))
+			return keepers.CheckTag(strings.TrimSpace(v))
 		}))); err != nil {
 		return err
 	}
 	if tag = strings.TrimSpace(tag); tag == "" {
 		tag = def
 	}
-	if tag != s.QuainationTag || s.QuainationSecret == "" {
-		s.QuainationSecret = quaination.NewSecret() // a new tag gets a new secret
+	if tag != s.KeepersTag || s.KeepersSecret == "" {
+		s.KeepersSecret = keepers.NewSecret() // a new tag gets a new secret
 	}
-	s.QuainationTag = tag
+	s.KeepersTag = tag
 	return nil
 }
 
@@ -578,7 +578,7 @@ func suggestTag() string {
 	if len(t) > 24 {
 		t = t[:24]
 	}
-	if quaination.CheckTag(t) != nil {
+	if keepers.CheckTag(t) != nil {
 		return ""
 	}
 	return t
@@ -651,7 +651,7 @@ func Summary(s settings.Settings, info Info) string {
 		fmt.Fprintf(&b, "  Map       %s; %s\n", peersNote(s), nodeNote(s))
 	}
 	if s.Reporting() {
-		fmt.Fprintf(&b, "Keepers     reports to quaination.xyz as %s; RPC public: open TCP 9200 to the internet\n", s.QuainationTag)
+		fmt.Fprintf(&b, "Keepers     reports to keepers.quainode.org as %s; RPC public: open TCP 9200 to the internet\n", s.KeepersTag)
 	}
 	kind := ""
 	if s.Service {

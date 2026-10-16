@@ -1,15 +1,15 @@
-// Package quaination reports the node to quaination.xyz's Keepers
-// (https://quaination.xyz/nodes) and claims it there.
+// Package keepers reports the node to the Keepers on quainode.org
+// (https://quainode.org/nodes) and claims it there.
 //
 // Reporting is go-quai's own quaistats client: --node.quaistats
-// "TAG:SECRET@quaination.xyz/keepers". The first login reserves TAG for
-// SECRET. quaination accepts the stats only after checking the node through
+// "TAG:SECRET@keepers.quainode.org". The first login reserves TAG for
+// SECRET. The Keepers accept the stats only after checking the node through
 // its Cyprus-1 RPC (a quai_getProof at its head), so that RPC must be
 // reachable from the internet on TCP 9200.
 //
-// Claiming signs "quaination.xyz keeper claim v2 tag=TAG ts=UNIX" with the
+// Claiming signs "quainode.org keeper claim v1 tag=TAG ts=UNIX" with the
 // node's libp2p key (go-quai's private.key), which ties TAG to the node.
-package quaination
+package keepers
 
 import (
 	"bytes"
@@ -32,12 +32,13 @@ import (
 )
 
 const (
-	Host = "quaination.xyz/keepers" // where go-quai's quaistats client logs in
-	Page = "https://quaination.xyz/nodes"
-	api  = "https://quaination.xyz/api/nodes"
+	Host       = "keepers.quainode.org" // where go-quai's quaistats client logs in
+	Page       = "https://quainode.org/nodes"
+	StatusPage = "https://quainode.org/nodes/status"
+	API        = "https://keepers.quainode.org/v1"
 )
 
-// TagRE is a valid tag (quaination's CLAIM_MESSAGE_RE).
+// TagRE is a valid tag (the tag in the Keepers' claim message).
 var TagRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{2,23}$`)
 
 // CheckTag explains an invalid tag.
@@ -58,7 +59,7 @@ func NewSecret() string {
 }
 
 // StatsFlag is go-quai's node.quaistats value. A zone RPC port other than
-// the default 9200 goes in the path, as quaination asks.
+// the default 9200 goes in the path, as the Keepers ask.
 func StatsFlag(tag, secret string, rpcPort int) string {
 	host := Host
 	if rpcPort != 9200 {
@@ -69,8 +70,11 @@ func StatsFlag(tag, secret string, rpcPort int) string {
 
 var client = &http.Client{Timeout: 15 * time.Second}
 
+// base is the read API Claim and Lookup call (API; tests point it elsewhere).
+var base = API
+
 // Claim signs the claim for tag with the libp2p key in keyFile and posts
-// it. It returns quaination's answer, a line or two for the terminal.
+// it. It returns the Keepers' answer, a line or two for the terminal.
 func Claim(ctx context.Context, keyFile, tag string) (string, error) {
 	if err := CheckTag(tag); err != nil {
 		return "", fmt.Errorf("tag %q: %w", tag, err)
@@ -79,14 +83,14 @@ func Claim(ctx context.Context, keyFile, tag string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	msg := fmt.Sprintf("quaination.xyz keeper claim v2 tag=%s ts=%d", tag, time.Now().Unix())
+	msg := fmt.Sprintf("quainode.org keeper claim v1 tag=%s ts=%d", tag, time.Now().Unix())
 	sig := ed25519.Sign(priv, []byte(msg))
 	form := url.Values{
 		"m": {msg},
 		"k": {hex.EncodeToString(priv.Public().(ed25519.PublicKey))},
 		"s": {base64.StdEncoding.EncodeToString(sig)},
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, api+"/claim", strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/claim", strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}
@@ -121,27 +125,59 @@ func readKey(path string) (ed25519.PrivateKey, error) {
 	return priv, nil
 }
 
-// Status is what quaination says about the node: the fields of its
-// operator status, /api/nodes/status.
+// Status is what the Keepers say about the node: the fields of their
+// operator status, POST /v1/status.
 type Status struct {
-	Status       string  `json:"status"` // verified, pending, failed, …
+	Tag          string  `json:"tag"`
+	Status       string  `json:"status"` // pending, verified or lapsed
 	StatusReason string  `json:"status_reason"`
 	LastLoginAt  string  `json:"last_login_at"`
 	LastVerified string  `json:"last_verified_at"`
+	LastReportAt string  `json:"last_report_at"`
+	RPCPort      int     `json:"rpc_port"`
+	Version      string  `json:"version"`
 	HeadNumber   float64 `json:"head_number"`
 	Lag          float64 `json:"lag"`
-	Node         string  `json:"node"`  // the peer ID quaination saw
-	Claim        string  `json:"claim"` // none, staged, claimed, claimed-paused, mismatch
+	Node         string  `json:"node"`       // the peer ID the Keepers verify at the reporting IP
+	Claim        string  `json:"claim"`      // none, claimed, claimed-paused or mismatch
+	ClaimNode    string  `json:"claim_node"` // the peer ID the claim was signed by
+	Checks       []Check `json:"checks"`     // newest first
 }
 
-// ErrUnknown means quaination doesn't know the tag with that secret: the
-// node hasn't logged in yet (or the secret is wrong).
-var ErrUnknown = errors.New("quaination hasn't seen this tag log in yet")
+// Check is one of the Keepers' checks of the node.
+type Check struct {
+	TS         string `json:"ts"`
+	Trigger    string `json:"trigger"`
+	Outcome    string `json:"outcome"`     // pass, fail or inconclusive
+	StepFailed int    `json:"step_failed"` // 1 census, 2 rpc, 3 head, 4 report/p2p, 5 proof; 0 none
+	Reason     string `json:"reason"`
+}
 
-// Lookup asks quaination for the node's status.
+// Step names a failed check step.
+func (c Check) Step() string {
+	switch c.StepFailed {
+	case 1:
+		return "census"
+	case 2:
+		return "rpc"
+	case 3:
+		return "head"
+	case 4:
+		return "report/p2p"
+	case 5:
+		return "proof"
+	}
+	return ""
+}
+
+// ErrUnknown means the Keepers don't know the tag with that secret: the
+// node hasn't logged in yet (or the secret is wrong).
+var ErrUnknown = errors.New("the Keepers haven't seen this tag log in yet")
+
+// Lookup asks the Keepers for the node's status.
 func Lookup(ctx context.Context, tag, secret string) (Status, error) {
 	body, _ := json.Marshal(map[string]string{"tag": tag, "secret": secret})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, api+"/status", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/status", bytes.NewReader(body))
 	if err != nil {
 		return Status{}, err
 	}
@@ -156,7 +192,10 @@ func Lookup(ctx context.Context, tag, secret string) (Status, error) {
 		Node *Status `json:"node"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
-		return Status{}, err
+		return Status{}, fmt.Errorf("HTTP %d: %w", resp.StatusCode, err)
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return Status{}, errors.New("too many requests; try again in a minute")
 	}
 	if !out.OK || out.Node == nil {
 		return Status{}, ErrUnknown

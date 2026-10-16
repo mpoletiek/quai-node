@@ -79,7 +79,7 @@ func runStatus(cmd *cobra.Command) error {
 		fmt.Fprintln(out, "Mining      stratum on ports 3333 (KawPoW), 3334 (Scrypt), 3335 (SHA-256)")
 	}
 	if s.Reporting() {
-		_ = quainationStatus(ctx, out, s, false)
+		_ = keepersStatus(ctx, out, s, false)
 	}
 	kind := ""
 	if s.Service {

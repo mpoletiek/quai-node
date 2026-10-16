@@ -78,7 +78,7 @@ deletes those too.
 | `quai-node run` | run in the foreground until Ctrl-C (no service) |
 | `quai-node service install\|uninstall\|start\|stop\|restart\|status` | the quai-node service |
 | `quai-node snapshot [restore]` | quikshot.dev's latest snapshot; `restore` replaces the chain data with it |
-| `quai-node quaination status\|claim` | this node on quaination.xyz's Keepers |
+| `quai-node keepers status\|claim` | this node on the Keepers at quainode.org |
 | `quai-node logs` | the end of the zone log |
 | `quai-node uninstall [--purge]` | remove services and binaries; `--purge` also the chain data and node key |
 
@@ -150,17 +150,33 @@ port; `--yes` takes that port unless `--p2p-port` chose one. Otherwise the
 port stays. A node elsewhere on the network that doesn't use UPnP doesn't
 show up in the router's mappings, so setup can't see it.
 
-### quaination.xyz Keepers
+### Keepers on quainode.org
 
-On mainnet cyprus1, setup offers to report the node to
-[quaination.xyz/nodes](https://quaination.xyz/nodes) under a tag
-(`--quaination-tag`): go-quai's quaistats client logs in with the tag and a
-generated secret (kept in `quai-node.toml`, which is owner-only) and sends
-stats every 15 s. quaination verifies the node through its RPC, so the RPC
-then listens on every interface and you open TCP 9200 to the internet: the
-node becomes a public RPC (net, web3 and quai APIs only).
-`quai-node quaination status` shows its checks; `quai-node quaination
-claim` signs the tag with the node's p2p key once it has logged in.
+On mainnet cyprus1, setup offers to report the node to the Keepers,
+[quainode.org/nodes](https://quainode.org/nodes), under a tag
+(`--keepers-tag`; `--no-keepers` stops it): go-quai's quaistats client logs
+in to `keepers.quainode.org` with the tag and a generated secret (kept as
+`keepers_tag` and `keepers_secret` in `quai-node.toml`, which is
+owner-only) and sends stats every 15 s. The Keepers verify the node through
+its RPC, so the RPC then listens on every interface and you open TCP 9200
+to the internet: the node becomes a public RPC (net, web3 and quai APIs
+only). `quai-node keepers status` shows its checks; `quai-node keepers
+claim` signs the tag with the node's p2p key once it has logged in. The
+node's page is `https://quainode.org/nodes/<tag>`, and
+[quainode.org/nodes/status](https://quainode.org/nodes/status) shows the
+service's own state. The Keepers take secrets of 16 to 128 characters (the
+generated one has 26) and refuse some reserved tags: if `quai-node keepers
+status` never sees the node log in although TCP 9200 is open, try another
+tag. `claim` prints the Keepers' own answer.
+
+The Keepers used to be on quaination.xyz. Installs that reported there
+move over by themselves on the next `quai-node setup` or update: the tag
+and secret (`quaination_tag` and `quaination_secret` in `quai-node.toml`)
+are reused, saved under the new names, and go-quai reports to
+`keepers.quainode.org` from then on. The tag is reserved on quainode.org
+by the node's first login there; the roll on quaination.xyz is a separate
+service and isn't carried over. The old `quai-node quaination` command and
+`--quaination-tag` flag still work.
 
 ### The dashboard's map
 

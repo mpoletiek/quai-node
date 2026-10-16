@@ -18,9 +18,9 @@ import (
 	"github.com/mpoletiek/quai-node/internal/bundle"
 	"github.com/mpoletiek/quai-node/internal/geo"
 	"github.com/mpoletiek/quai-node/internal/home"
+	"github.com/mpoletiek/quai-node/internal/keepers"
 	"github.com/mpoletiek/quai-node/internal/onpath"
 	"github.com/mpoletiek/quai-node/internal/quaiaddr"
-	"github.com/mpoletiek/quai-node/internal/quaination"
 	"github.com/mpoletiek/quai-node/internal/services"
 	"github.com/mpoletiek/quai-node/internal/settings"
 	"github.com/mpoletiek/quai-node/internal/snapshot"
@@ -49,8 +49,8 @@ type setupOpts struct {
 	fromScratch bool
 	ignoreSpace bool
 	dashPublic  bool
-	qnTag       string
-	noQn        bool
+	keepersTag  string
+	noKeepers   bool
 	geoip       string
 	geoipDB     string
 	location    string
@@ -91,8 +91,14 @@ quai-node.toml after you edit it.`,
 	f.StringVar(&o.runAs, "run-as", "", "Linux: user the services run as (default: you)")
 	f.IntVar(&o.p2pPort, "p2p-port", 0, "P2P port, TCP and UDP (default 4002)")
 	f.BoolVar(&o.dashPublic, "dashboard-public", false, "let other machines open the dashboard (every interface; it has no login)")
-	f.StringVar(&o.qnTag, "quaination-tag", "", "report to quaination.xyz's Keepers under this tag (makes the node's RPC public: open TCP 9200)")
-	f.BoolVar(&o.noQn, "no-quaination", false, "stop reporting to quaination.xyz")
+	f.StringVar(&o.keepersTag, "keepers-tag", "", "report to the Keepers on quainode.org under this tag (makes the node's RPC public: open TCP 9200)")
+	f.BoolVar(&o.noKeepers, "no-keepers", false, "stop reporting to the Keepers")
+	// The flags' names from when the Keepers were on quaination.xyz: hidden,
+	// deprecated aliases that set the same thing.
+	f.StringVar(&o.keepersTag, "quaination-tag", "", "old name of --keepers-tag")
+	f.BoolVar(&o.noKeepers, "no-quaination", false, "old name of --no-keepers")
+	_ = f.MarkDeprecated("quaination-tag", "use --keepers-tag")
+	_ = f.MarkDeprecated("no-quaination", "use --no-keepers")
 	f.BoolVar(&o.snapshot, "snapshot", false, "start the chain from quikshot.dev's latest snapshot (mainnet cyprus1; switches go-quai to Pebble)")
 	f.BoolVar(&o.fromScratch, "from-scratch", false, "delete the chain in the data directory, so the node syncs it again from the network")
 	f.BoolVar(&o.ignoreSpace, "ignore-space", false, "set up even if the data directory looks too small for the chain")
@@ -320,10 +326,11 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 		}
 	}
 	if s.Reporting() {
-		fmt.Fprintf(out, "\nquaination.xyz:       reporting as %s. To be verified there:\n", s.QuainationTag)
+		fmt.Fprintf(out, "\nKeepers:              reporting to keepers.quainode.org as %s. To be verified there:\n", s.KeepersTag)
 		fmt.Fprintln(out, "  • open TCP 9200 to the internet (forward it on your router, allow it in any firewall);")
 		fmt.Fprintf(out, "  • make sure P2P port %d is reachable too.\n", s.P2PPort)
-		fmt.Fprintln(out, "  Then: quai-node quaination status    (and once it has logged in: quai-node quaination claim)")
+		fmt.Fprintln(out, "  Then: quai-node keepers status    (and once it has logged in: quai-node keepers claim)")
+		fmt.Fprintf(out, "  Your node's page: %s/%s\n", keepers.Page, s.KeepersTag)
 		fmt.Fprintf(out, "  Your tag's secret is in %s; keep it if you move the node.\n", h.Settings())
 	}
 	if s.Mining {
@@ -453,14 +460,14 @@ func applyFlags(cmd *cobra.Command, s *settings.Settings, o setupOpts, m bundle.
 		}
 		s.DashboardListen = net.JoinHostPort(host, s.DashboardPort())
 	}
-	if o.qnTag != "" {
-		if o.qnTag != s.QuainationTag || s.QuainationSecret == "" {
-			s.QuainationSecret = quaination.NewSecret()
+	if o.keepersTag != "" {
+		if o.keepersTag != s.KeepersTag || s.KeepersSecret == "" {
+			s.KeepersSecret = keepers.NewSecret()
 		}
-		s.QuainationTag = o.qnTag
+		s.KeepersTag = o.keepersTag
 	}
-	if o.noQn {
-		s.QuainationTag, s.QuainationSecret = "", ""
+	if o.noKeepers {
+		s.KeepersTag, s.KeepersSecret = "", ""
 	}
 	if o.snapshot && o.fromScratch {
 		return errors.New("--snapshot or --from-scratch, not both")

@@ -45,7 +45,8 @@ status after that.`,
 		},
 	}
 	root.PersistentFlags().StringVar(&homeFlag, "home", "", "quai-node home directory (default: per OS; env QUAI_NODE_HOME)")
-	root.AddCommand(setupCmd(), runCmd(), statusCmd(), serviceCmd(), snapshotCmd(), quainationCmd(), logsCmd(), uninstallCmd(), versionCmd())
+	// quainationCmd: the hidden old name of keepersCmd (the Keepers were on quaination.xyz).
+	root.AddCommand(setupCmd(), runCmd(), statusCmd(), serviceCmd(), snapshotCmd(), keepersCmd(), quainationCmd(), logsCmd(), uninstallCmd(), versionCmd())
 	return root.Execute()
 }
 

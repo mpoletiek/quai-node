@@ -37,7 +37,7 @@ var owned = map[string]map[string]string{
 		"qi-coinbases":     "qi_coinbase",
 		"stratum-enabled":  "mining",
 		"stratum-api-addr": "mining",
-		"quaistats":        "quaination_tag",
+		"quaistats":        "keepers_tag",
 	},
 	"rpc": {
 		"http":        "",

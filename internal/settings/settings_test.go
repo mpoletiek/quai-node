@@ -133,3 +133,90 @@ func TestExtra(t *testing.T) {
 		}
 	}
 }
+
+// A quai-node.toml from before the Keepers moved to quainode.org has
+// quaination_tag/quaination_secret: Load moves them over, Save writes the
+// keepers_* keys only, and go-quai reports to keepers.quainode.org.
+func TestLegacyKeepers(t *testing.T) {
+	h := home.Home{Dir: t.TempDir()}
+	if err := os.MkdirAll(h.Dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := "network = 'colosseum'\nregion = 0\nzone = 0\ndata_dir = '" + filepath.Join(h.Dir, "data") + "'\n" +
+		"p2p_port = 4002\nportmap = true\nmining = false\ndashboard = false\ndashboard_listen = '127.0.0.1:8090'\n" +
+		"geoip = 'auto'\nquaination_tag = 'MyNode'\nquaination_secret = 'abcdefghijklmnopqrstuvwxyz'\nservice = false\n"
+	if err := os.WriteFile(h.Settings(), []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.KeepersTag != "MyNode" || s.KeepersSecret != "abcdefghijklmnopqrstuvwxyz" || !s.Reporting() {
+		t.Fatalf("legacy keys not migrated: %+v", s)
+	}
+	if err := Save(h, s); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(h.Settings())
+	if strings.Contains(string(b), "quaination") ||
+		!strings.Contains(string(b), "keepers_tag = 'MyNode'") || !strings.Contains(string(b), "keepers_secret = 'abcdefghijklmnopqrstuvwxyz'") {
+		t.Errorf("saved settings:\n%s", b)
+	}
+	if again, err := Load(h); err != nil || again != s {
+		t.Errorf("reloaded %+v (%v), want %+v", again, err, s)
+	}
+	var node map[string]map[string]any
+	b, _ = os.ReadFile(h.NodeConfig())
+	if err := toml.Unmarshal(b, &node); err != nil {
+		t.Fatal(err)
+	}
+	if got := node["node"]["quaistats"]; got != "MyNode:abcdefghijklmnopqrstuvwxyz@keepers.quainode.org" {
+		t.Errorf("node.quaistats = %v", got)
+	}
+	if node["rpc"]["http-addr"] != "0.0.0.0" {
+		t.Errorf("rpc: %v", node["rpc"])
+	}
+
+	// The new keys win over leftover legacy ones.
+	both := legacy + "keepers_tag = 'NewTag'\nkeepers_secret = 'zyxwvutsrqponmlkjihgfedcba'\n"
+	os.WriteFile(h.Settings(), []byte(both), 0o600)
+	if s, err := Load(h); err != nil || s.KeepersTag != "NewTag" || s.KeepersSecret != "zyxwvutsrqponmlkjihgfedcba" {
+		t.Errorf("Load = %+v, %v", s, err)
+	}
+
+	// Secrets the Keepers refuse are refused here too.
+	s.KeepersSecret = "short"
+	if err := s.Validate(); err == nil || !strings.Contains(err.Error(), "keepers_secret") {
+		t.Errorf("Validate = %v", err)
+	}
+	s.KeepersSecret = "abcdefghijklmnopqrstuvwxyz"
+	s.Zone = 1
+	if err := s.Validate(); err == nil || !strings.Contains(err.Error(), "cyprus1") {
+		t.Errorf("Validate = %v", err)
+	}
+}
+
+// A hand-picked legacy secret shorter than quainode.org's 16 is replaced, not left to fail the update.
+func TestLegacyShortSecret(t *testing.T) {
+	h := home.Home{Dir: t.TempDir()}
+	if err := os.MkdirAll(h.Dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := "network = 'colosseum'\nregion = 0\nzone = 0\ndata_dir = '" + filepath.Join(h.Dir, "data") +
+		"'\np2p_port = 4002\nportmap = true\nmining = false\ndashboard = false\ndashboard_listen = '127.0.0.1:8090'\n" +
+		"geoip = 'off'\nservice = false\nquaination_tag = 'Ember-Forge'\nquaination_secret = 'short123'\n"
+	if err := os.WriteFile(h.Settings(), []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.KeepersTag != "Ember-Forge" || len(s.KeepersSecret) < 16 || s.KeepersSecret == "short123" {
+		t.Fatalf("tag %q secret %q", s.KeepersTag, s.KeepersSecret)
+	}
+	if err := s.Validate(); err != nil {
+		t.Fatalf("migrated settings don't validate: %v", err)
+	}
+}

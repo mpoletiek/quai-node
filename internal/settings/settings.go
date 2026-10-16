@@ -14,8 +14,8 @@ import (
 
 	"github.com/mpoletiek/quai-node/internal/geo"
 	"github.com/mpoletiek/quai-node/internal/home"
+	"github.com/mpoletiek/quai-node/internal/keepers"
 	"github.com/mpoletiek/quai-node/internal/quaiaddr"
-	"github.com/mpoletiek/quai-node/internal/quaination"
 )
 
 // Networks quai-node offers. go-quai calls them environments.
@@ -52,11 +52,12 @@ type Settings struct {
 	GeoIPDB  string `toml:"geoip_db,omitempty"`
 	Location string `toml:"location,omitempty"`
 
-	// Reporting to quaination.xyz's Keepers: on when the tag is set. The
+	// Reporting to the Keepers on quainode.org: on when the tag is set. The
 	// secret reserves the tag; it is also how `quai-node status` reads the
 	// node's standing there. Reporting makes the node's RPC public.
-	QuainationTag    string `toml:"quaination_tag,omitempty"`
-	QuainationSecret string `toml:"quaination_secret,omitempty"`
+	// (Load also reads the legacy quaination_tag/quaination_secret keys.)
+	KeepersTag    string `toml:"keepers_tag,omitempty"`
+	KeepersSecret string `toml:"keepers_secret,omitempty"`
 
 	Service bool   `toml:"service"`          // node (and dashboard) run as services
 	RunAs   string `toml:"run_as,omitempty"` // Linux/macOS: user the services run as
@@ -89,8 +90,8 @@ func (s Settings) DashboardPort() string {
 	return port
 }
 
-// Reporting reports whether the node reports to quaination.xyz.
-func (s Settings) Reporting() bool { return s.QuainationTag != "" }
+// Reporting reports whether the node reports to the Keepers.
+func (s Settings) Reporting() bool { return s.KeepersTag != "" }
 
 // ZoneOf is the zone the node runs.
 func (s Settings) ZoneOf() quaiaddr.Zone { return quaiaddr.Zone{Region: s.Region, Zone: s.Zone} }
@@ -146,15 +147,15 @@ func (s Settings) Validate() error {
 		return fmt.Errorf("dashboard_listen %q: expected HOST:PORT", s.DashboardListen)
 	}
 	if s.Reporting() {
-		if err := quaination.CheckTag(s.QuainationTag); err != nil {
-			return fmt.Errorf("quaination_tag %q: %w", s.QuainationTag, err)
+		if err := keepers.CheckTag(s.KeepersTag); err != nil {
+			return fmt.Errorf("keepers_tag %q: %w", s.KeepersTag, err)
 		}
-		if len(s.QuainationSecret) < 8 {
-			return errors.New("quaination_secret: at least 8 characters")
+		if n := len(s.KeepersSecret); n < 16 || n > 128 {
+			return errors.New("keepers_secret: 16 to 128 characters")
 		}
-		// quaination verifies nodes with Cyprus-1 state proofs, on mainnet.
+		// The Keepers verify nodes with Cyprus-1 state proofs, on mainnet.
 		if s.Network != "colosseum" || s.ZoneOf() != (quaiaddr.Zone{}) {
-			return errors.New("quaination.xyz takes mainnet (colosseum) nodes running cyprus1")
+			return errors.New("the Keepers on quainode.org take mainnet (colosseum) nodes running cyprus1")
 		}
 	}
 	if s.Location != "" {
@@ -183,6 +184,24 @@ func Load(h home.Home) (Settings, error) {
 	if err := toml.Unmarshal(b, &s); err != nil {
 		return s, fmt.Errorf("%s: %w", h.Settings(), err)
 	}
+	// Legacy: installs from before the Keepers moved to quainode.org keep
+	// their tag and secret under quaination_tag/quaination_secret. Move them
+	// over; Save writes only the keepers_* keys.
+	var legacy struct {
+		Tag    string `toml:"quaination_tag"`
+		Secret string `toml:"quaination_secret"`
+	}
+	if err := toml.Unmarshal(b, &legacy); err != nil {
+		return s, fmt.Errorf("%s: %w", h.Settings(), err)
+	}
+	if s.KeepersTag == "" && legacy.Tag != "" {
+		s.KeepersTag, s.KeepersSecret = legacy.Tag, legacy.Secret
+		// quainode.org wants 16+ characters. Nothing is reserved there yet (the old roll was a separate
+		// service), so a short hand-picked secret is simply replaced rather than failing the update.
+		if len(s.KeepersSecret) < 16 {
+			s.KeepersSecret = keepers.NewSecret()
+		}
+	}
 	return s, nil
 }
 
@@ -206,7 +225,7 @@ func Save(h home.Home, s Settings) error {
 		return err
 	}
 	head := "# quai-node settings, written by `quai-node setup`. Edit and run\n# `quai-node setup --apply` to rewrite the configs below from it.\n\n"
-	// Owner-only: both can hold the quaination secret.
+	// Owner-only: both can hold the Keepers secret.
 	if err := writeFile(h.Settings(), append([]byte(head), b...)); err != nil {
 		return err
 	}
@@ -262,8 +281,8 @@ func NodeConfig(h home.Home, s Settings) map[string]map[string]any {
 	rpc := map[string]any{"http": true, "http-addr": "127.0.0.1"}
 	if s.Reporting() {
 		_, _, zone := s.ZoneOf().RPCPorts()
-		node["quaistats"] = quaination.StatsFlag(s.QuainationTag, s.QuainationSecret, zone)
-		// quaination checks the node by calling its RPC from the internet.
+		node["quaistats"] = keepers.StatsFlag(s.KeepersTag, s.KeepersSecret, zone)
+		// The Keepers check the node by calling its RPC from the internet.
 		rpc["http-addr"] = "0.0.0.0"
 		rpc["http-vhosts"] = "*"
 	}
