@@ -38,9 +38,6 @@ jobs:
         if: matrix.goos != 'darwin'
         with:
           version: 0.14.1
-      - name: Rust targets for quai-dash
-        if: matrix.dash_from_source == '1'
-        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
       - name: Payload
         env:
           GO_QUAI_REF: ${{ vars.GO_QUAI_REF }}

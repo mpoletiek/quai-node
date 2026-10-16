@@ -135,6 +135,11 @@ if [ "$dash_version" != none ]; then
 		windows/amd64) rt=x86_64-pc-windows-msvc ;;
 		*) die "no Rust target known for $goos/$goarch" ;;
 		esac
+		# The target goes to the toolchain quai-dash pins (rust-toolchain.toml),
+		# so it's added from inside its checkout.
+		if command -v rustup >/dev/null 2>&1; then
+			(cd "$work/dash/src" && rustup target add "$rt")
+		fi
 		(cd "$work/dash/src" && cargo build --locked --release --target "$rt")
 		cp "$work/dash/src/target/$rt/release/quai-dash$exe" "$work/stage/quai-dash$exe"
 	else
