@@ -43,6 +43,7 @@ jobs:
           GO_QUAI_REF: ${{ vars.GO_QUAI_REF }}
           DASH_VERSION: ${{ vars.DASH_VERSION }}
           DASH_FROM_SOURCE: ${{ matrix.dash_from_source }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: scripts/build-payload.sh ${{ matrix.goos }} ${{ matrix.goarch }}
       - name: quai-node
         run: make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION=${{ github.ref_name }}

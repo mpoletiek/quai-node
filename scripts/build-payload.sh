@@ -30,9 +30,15 @@ die() { say "$*"; exit 1; }
 
 # latest REPO: the tag of REPO's latest published GitHub release. Not the
 # newest tag: a tag can come before its release is published (or have
-# none), and then its downloads don't exist yet.
+# none), and then its downloads don't exist yet. With GITHUB_TOKEN set
+# (CI), the request is authenticated: anonymous API calls from shared
+# runners hit GitHub's rate limit.
 latest() {
-	curl -fsSL "https://api.github.com/repos/$1/releases/latest" |
+	if [ -n "${GITHUB_TOKEN:-}" ]; then
+		curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$1/releases/latest"
+	else
+		curl -fsSL "https://api.github.com/repos/$1/releases/latest"
+	fi |
 		sed -n 's/^ *"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1
 }
 
