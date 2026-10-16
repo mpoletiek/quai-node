@@ -52,6 +52,8 @@ type Info struct {
 	// SpaceShort says how much space the settings' data directory lacks,
 	// "" when enough (or unknown).
 	SpaceShort func(settings.Settings) string
+	// IgnoreSpace: --ignore-space was given, so a short disk isn't asked about.
+	IgnoreSpace bool
 }
 
 // ErrAborted means the user backed out.
@@ -377,7 +379,7 @@ func askChain(s *settings.Settings, info Info) error {
 	}
 	s.RestoreSnapshot = way == "snapshot"
 	s.WipeChain = way == "scratch"
-	if short := info.SpaceShort(*s); short != "" {
+	if short := info.SpaceShort(*s); short != "" && !info.IgnoreSpace {
 		goOn := false
 		if err := ask(huh.NewGroup(huh.NewConfirm().
 			Title("Not enough disk space: " + short + ". Continue anyway?").

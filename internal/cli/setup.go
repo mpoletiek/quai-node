@@ -159,6 +159,7 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 		f := cmd.Flags()
 		info.ServiceSet = f.Changed("service") || o.noService
 		info.DashboardSet = f.Changed("dashboard") || o.noDash
+		info.IgnoreSpace = o.ignoreSpace
 		if mgrErr == nil {
 			info.ServiceKind = mgr.Kind()
 		} else {
