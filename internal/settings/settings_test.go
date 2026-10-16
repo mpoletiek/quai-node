@@ -2,6 +2,7 @@ package settings
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestSaveLoad(t *testing.T) {
 	}
 
 	b, _ = os.ReadFile(h.DashConfig())
-	for _, want := range []string{`rpc = 'http://127.0.0.1:9200'`, `logs = '` + h.NodeLogs() + "/zone-0-0.log'", `stratum_api = 'http://127.0.0.1:3336'`, `geoip = 'online'`, `here = '47.4,8.6'`} {
+	for _, want := range []string{`rpc = 'http://127.0.0.1:9200'`, `logs = '` + filepath.Join(h.NodeLogs(), "zone-0-0.log") + "'", `stratum_api = 'http://127.0.0.1:3336'`, `geoip = 'online'`, `here = '47.4,8.6'`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("dash config lacks %q:\n%s", want, b)
 		}

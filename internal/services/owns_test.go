@@ -16,8 +16,10 @@ type fakeMgr struct {
 func (f fakeMgr) Definition(name string) (string, error) { return f.defs[name], nil }
 
 func TestOwns(t *testing.T) {
-	mine := home.Home{Dir: filepath.FromSlash("/home/a/.local/share/quai-node")}
-	other := home.Home{Dir: filepath.FromSlash("/home/a/.local/share/quai-node2")}
+	// Absolute on every OS (Windows wants a drive letter).
+	base := t.TempDir()
+	mine := home.Home{Dir: filepath.Join(base, "quai-node")}
+	other := home.Home{Dir: filepath.Join(base, "quai-node2")}
 	m := fakeMgr{defs: map[string]string{
 		Name: "ExecStart=" + mine.QuaiNode() + " run --service --home " + mine.Dir + "\n",
 		Node: "command=\"" + other.GoQuai() + "\"\n",
