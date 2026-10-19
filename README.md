@@ -105,6 +105,20 @@ a link in `~/.local/bin`
 home's `bin` folder added to your user PATH (Windows). A `--home` install
 leaves the command alone. `uninstall` takes it off again.
 
+On Windows, terminals that were already open keep their old PATH (the
+installer updates the window it ran in). Windows Terminal hands every
+new tab the PATH it started with, so close all its windows first. If
+`quai-node` still isn't found, add the folder for your user and open a
+new terminal:
+
+```powershell
+[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ";$env:ProgramData\quai-node\bin", 'User')
+```
+
+or run it by its full path, `& "$env:ProgramData\quai-node\bin\quai-node.exe" status`.
+quai-node 0.1.3 and earlier took that folder off PATH again at the end
+of setup on Windows; 0.1.4 fixes it.
+
 ### Chain data, snapshots and disk space
 
 Setup reads [quikshot.dev](https://quikshot.dev)'s latest snapshot

@@ -88,8 +88,22 @@
         if ($env:QUAI_NODE_ARGS) { $setupArgs += ($env:QUAI_NODE_ARGS -split '\s+' | Where-Object { $_ }) }
         & $exe @setupArgs
         if ($LASTEXITCODE -ne 0) { Write-Error "install: quai-node setup exited with code $LASTEXITCODE" }
+
+        # Setup put its bin directory on the user's PATH in the registry; this
+        # window started before that, so reread PATH here too.
+        $bin = Join-Path $env:ProgramData 'quai-node\bin'
+        $env:Path = (@([Environment]::GetEnvironmentVariable('Path', 'Machine'),
+                [Environment]::GetEnvironmentVariable('Path', 'User')) | Where-Object { $_ }) -join ';'
         Write-Host ''
-        Write-Host 'Open a new terminal to have quai-node on your PATH.'
+        if (Get-Command quai-node -ErrorAction SilentlyContinue) {
+            Write-Host 'quai-node is on your PATH: try  quai-node status'
+        } elseif (Test-Path (Join-Path $bin 'quai-node.exe')) {
+            Write-Host "quai-node isn't on your PATH yet. To add it for your user, run:"
+            Write-Host ''
+            Write-Host "  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';$bin', 'User')"
+            Write-Host ''
+            Write-Host "and open a new terminal (close every Windows Terminal window first). Or run it by its full path: & '$bin\quai-node.exe' status"
+        }
     } finally {
         Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
     }

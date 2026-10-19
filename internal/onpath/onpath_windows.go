@@ -49,8 +49,14 @@ func Add(target string) (Result, error) {
 	return r, nil
 }
 
-// Remove takes target's directory off the user's PATH.
+// Remove takes target's directory off the user's PATH. On Windows PATH holds
+// directories, not commands, and quai-dash would share quai-node's bin
+// directory, so only quai-node's own removal takes it off: dropping quai-dash
+// (setup does, as Windows has no dashboard) must leave quai-node a command.
 func Remove(target string) error {
+	if !takesDirOff(target) {
+		return nil
+	}
 	dir := filepath.Dir(target)
 	k, err := registry.OpenKey(registry.CURRENT_USER, "Environment", registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
@@ -78,6 +84,10 @@ func Remove(target string) error {
 	}
 	broadcast()
 	return err
+}
+
+func takesDirOff(target string) bool {
+	return strings.EqualFold(filepath.Base(target), "quai-node.exe")
 }
 
 // broadcast tells running programs (Explorer, so new terminals) that the
