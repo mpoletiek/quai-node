@@ -220,3 +220,46 @@ func TestLegacyShortSecret(t *testing.T) {
 		t.Fatalf("migrated settings don't validate: %v", err)
 	}
 }
+
+func TestIndexNode(t *testing.T) {
+	h := home.Home{Dir: t.TempDir()}
+	s := Defaults(h)
+	if _, ok := NodeConfig(h, s)["node"]["index-address-utxos"]; ok {
+		t.Error("not an index node, yet index-address-utxos is set")
+	}
+	s.IndexUTXOs = true
+	if v := NodeConfig(h, s)["node"]["index-address-utxos"]; v != true {
+		t.Errorf("index node: index-address-utxos = %v", v)
+	}
+
+	write := func(body string) {
+		t.Helper()
+		if err := os.MkdirAll(h.ConfigDir(), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(h.ExtraConfig(), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// It's quai-node's to write now, so extra.toml can't.
+	write("[node]\nindex-address-utxos = true\n")
+	if err := Save(h, s); err == nil || !strings.Contains(err.Error(), "index_utxos") {
+		t.Errorf("index-address-utxos in extra.toml: Save = %v, want it pointed at index_utxos", err)
+	}
+
+	// go-quai's reindex opens the zone database as LevelDB.
+	write("[node]\nreindex = true\n")
+	s.DBEngine = "pebble"
+	if err := Save(h, s); err == nil || !strings.Contains(err.Error(), "Pebble") {
+		t.Errorf("reindex on Pebble: Save = %v, want a refusal", err)
+	}
+	s.DBEngine = ""
+	if err := Save(h, s); err != nil {
+		t.Errorf("reindex on LevelDB: Save = %v", err)
+	}
+	write("[node]\nreindex = false\n")
+	s.DBEngine = "pebble"
+	if err := Save(h, s); err != nil {
+		t.Errorf("reindex = false on Pebble: Save = %v", err)
+	}
+}

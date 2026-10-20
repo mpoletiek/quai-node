@@ -28,16 +28,17 @@ var GoQuaiTables = []string{"global", "metrics", "node", "peers", "rpc", "txpool
 var owned = map[string]map[string]string{
 	"global": {"data-dir": "data_dir"},
 	"node": {
-		"environment":      "network",
-		"slices":           "region and zone",
-		"port":             "p2p_port",
-		"portmap":          "portmap",
-		"db-engine":        "db_engine",
-		"quai-coinbases":   "quai_coinbase",
-		"qi-coinbases":     "qi_coinbase",
-		"stratum-enabled":  "mining",
-		"stratum-api-addr": "mining",
-		"quaistats":        "keepers_tag",
+		"environment":         "network",
+		"slices":              "region and zone",
+		"port":                "p2p_port",
+		"portmap":             "portmap",
+		"db-engine":           "db_engine",
+		"index-address-utxos": "index_utxos",
+		"quai-coinbases":      "quai_coinbase",
+		"qi-coinbases":        "qi_coinbase",
+		"stratum-enabled":     "mining",
+		"stratum-api-addr":    "mining",
+		"quaistats":           "keepers_tag",
 	},
 	"rpc": {
 		"http":        "",
@@ -52,7 +53,7 @@ const extraStarter = `# go-quai keys of your own. quai-node merges this file int
 #
 # Use go-quai's tables and key names: 'go-quai config' prints every key with
 # its default. Keys quai-node writes from quai-node.toml (the network, zone,
-# ports, data dir, mining and the RPC) can't be set here.
+# ports, data dir, mining, the index and the RPC) can't be set here.
 #
 # After editing:  quai-node setup --apply
 #
@@ -100,6 +101,17 @@ func LoadExtra(h home.Home) (map[string]map[string]any, error) {
 		out[name] = table
 	}
 	return out, nil
+}
+
+// CheckExtra turns away keys of extra that go wrong with s. go-quai's
+// reindex (node.reindex) opens the zone database as LevelDB whatever the
+// chain's engine, so on a Pebble chain, as quikshot.dev's snapshots are,
+// it fails or damages the chain.
+func CheckExtra(h home.Home, extra map[string]map[string]any, s Settings) error {
+	if v, ok := extra["node"]["reindex"]; ok && v != false && v != "false" && s.Engine() == "pebble" {
+		return fmt.Errorf("%s: [node] reindex can't run on this chain: go-quai reindexes the zone database as LevelDB, and this chain is Pebble; remove it", h.ExtraConfig())
+	}
+	return nil
 }
 
 // ExtraNames lists extra's keys as table.key, sorted (for setup's output).

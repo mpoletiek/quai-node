@@ -164,6 +164,26 @@ port; `--yes` takes that port unless `--p2p-port` chose one. Otherwise the
 port stays. A node elsewhere on the network that doesn't use UPnP doesn't
 show up in the router's mappings, so setup can't see it.
 
+### Index nodes
+
+Setup asks whether to run an index node (`--index-utxos`; `index_utxos` in
+`quai-node.toml`). An index node keeps an index of every address's Qi
+UTXOs (go-quai's `--node.index-address-utxos`). Qi balances
+(`quai_getBalance`) and UTXO lists (`quai_getOutpointsByAddress`,
+`quai_getOutPointsByAddressAndRange`) on the node's RPC come from it;
+without it they come back zero or empty. Wallets, explorers and similar
+services need it. A node that only syncs and mines doesn't, and it costs
+disk space and work on every block, so it's off unless you choose it.
+
+go-quai indexes the blocks it processes while indexing is on. Turned on
+for a fresh sync, or with "delete it and sync from scratch", the index is
+complete. Turned on for a chain the node already has, or over
+quikshot.dev's snapshot, it starts at that point: Qi received earlier is
+missing and balances come out too low. Setup says which when it asks.
+go-quai's own `reindex` would rebuild it, but it opens the zone database
+as LevelDB, so setup refuses it on a Pebble chain (every snapshot
+restore); on a LevelDB chain it can go in `extra.toml` for one start.
+
 ### Keepers on quainode.org
 
 On mainnet cyprus1, setup offers to report the node to the Keepers,
@@ -250,7 +270,8 @@ max-peers = '100'
 Then `quai-node setup --apply` to rewrite the config and restart the node.
 Setup checks the file first and refuses a table go-quai doesn't have, or a
 key quai-node writes itself (the network, zone, ports, data directory,
-mining and the RPC). Change those in `quai-node.toml`.
+mining, the index and the RPC). Change those in `quai-node.toml`. It also
+refuses `reindex` on a Pebble chain (see [Index nodes](#index-nodes)).
 
 ## The service
 

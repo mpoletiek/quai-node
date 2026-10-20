@@ -45,6 +45,7 @@ type setupOpts struct {
 	noService   bool
 	runAs       string
 	p2pPort     int
+	indexUTXOs  bool
 	snapshot    bool
 	fromScratch bool
 	ignoreSpace bool
@@ -90,6 +91,7 @@ quai-node.toml after you edit it.`,
 	f.BoolVar(&o.noService, "no-service", false, "don't install services: run with `quai-node run`")
 	f.StringVar(&o.runAs, "run-as", "", "Linux: user the services run as (default: you)")
 	f.IntVar(&o.p2pPort, "p2p-port", 0, "P2P port, TCP and UDP (default 4002)")
+	f.BoolVar(&o.indexUTXOs, "index-utxos", false, "run an index node: index every address's Qi UTXOs, for Qi balances and UTXO lists on the RPC (--index-utxos=false to stop)")
 	f.BoolVar(&o.dashPublic, "dashboard-public", false, "let other machines open the dashboard (every interface; it has no login)")
 	f.StringVar(&o.keepersTag, "keepers-tag", "", "report to the Keepers on quainode.org under this tag (makes the node's RPC public: open TCP 9200)")
 	f.BoolVar(&o.noKeepers, "no-keepers", false, "stop reporting to the Keepers")
@@ -165,6 +167,7 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 		f := cmd.Flags()
 		info.ServiceSet = f.Changed("service") || o.noService
 		info.DashboardSet = f.Changed("dashboard") || o.noDash
+		info.IndexSet = f.Changed("index-utxos")
 		info.IgnoreSpace = o.ignoreSpace
 		if mgrErr == nil {
 			info.ServiceKind = mgr.Kind()
@@ -202,6 +205,13 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 	// Turned away now rather than halfway through: Save merges it.
 	extra, err := settings.LoadExtra(h)
 	if err != nil {
+		return err
+	}
+	after := s // the engine a snapshot switches to
+	if s.RestoreSnapshot {
+		after.DBEngine = "pebble"
+	}
+	if err := settings.CheckExtra(h, extra, after); err != nil {
 		return err
 	}
 	if !interactive && !o.ignoreSpace {
@@ -452,6 +462,9 @@ func applyFlags(cmd *cobra.Command, s *settings.Settings, o setupOpts, m bundle.
 	}
 	if o.p2pPort != 0 {
 		s.P2PPort = o.p2pPort
+	}
+	if f.Changed("index-utxos") {
+		s.IndexUTXOs = o.indexUTXOs
 	}
 	if f.Changed("dashboard-public") {
 		host := "127.0.0.1"

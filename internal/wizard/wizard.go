@@ -36,6 +36,8 @@ type Info struct {
 	// ServiceSet and DashboardSet: a flag settled it, so it isn't asked.
 	ServiceSet   bool
 	DashboardSet bool
+	// IndexSet: --index-utxos settled whether this is an index node.
+	IndexSet bool
 	// Snapshot is quikshot.dev's latest snapshot, nil when unknown; its
 	// unpacked size is also the best estimate of the chain's size today.
 	Snapshot *snapshot.Manifest
@@ -151,6 +153,9 @@ func Run(s *settings.Settings, info Info) error {
 	if err := askChain(s, info); err != nil {
 		return err
 	}
+	if err := askIndex(s, info); err != nil {
+		return err
+	}
 	if s.Dashboard {
 		if err := askMap(s); err != nil {
 			return err
@@ -186,6 +191,46 @@ func Run(s *settings.Settings, info Info) error {
 		return ErrAborted
 	}
 	return nil
+}
+
+// askIndex asks whether this is an index node, and says how much of the
+// chain its index would cover given the chain choice just made: go-quai
+// indexes the blocks it processes while indexing is on, and quai-node
+// offers no reindex (go-quai's opens the database as LevelDB, and fails
+// on Pebble chains).
+func askIndex(s *settings.Settings, info Info) error {
+	if info.IndexSet {
+		return nil
+	}
+	cover := "Turned on now, it indexes every block as the node syncs, so the index is complete."
+	switch used := home.ChainUse(s.DataDir); {
+	case s.RestoreSnapshot:
+		cover = "With quikshot.dev's snapshot, it indexes only the blocks after the snapshot: Qi received before then is missing, so balances come out too low. " +
+			"For a complete index, sync from scratch instead (slow: days or more)."
+	case used > 0 && !s.WipeChain && s.IndexUTXOs:
+		cover = "This node is already an index node: keep it on, or its index stops at the last block it indexed."
+	case used > 0 && !s.WipeChain:
+		cover = "Turned on for the chain already here, it indexes only the blocks from now on: Qi received before then is missing, so balances come out too low. " +
+			"For a complete index, run setup again and choose to delete the chain and sync from scratch (slow: days or more)."
+	}
+	return ask(huh.NewGroup(
+		huh.NewNote().Title("Index node").Description(noteText(
+			"An index node keeps an index of every address's Qi UTXOs. Qi balances (quai_getBalance) and UTXO lists "+
+				"(quai_getOutpointsByAddress) on this node's RPC come from it; without it they come back zero or empty. "+
+				"Wallets, explorers and other services need that; a node that only syncs and mines doesn't, so most don't run one. "+
+				"It takes extra disk space and work on every block.\n\n"+cover)),
+		huh.NewConfirm().Title("Run an index node?").
+			Affirmative("Yes, index Qi UTXOs").Negative("No").
+			Value(&s.IndexUTXOs)))
+}
+
+// noteText keeps a note's underscores (quai_getBalance): drawn notes take
+// _x_ as italics, line-by-line ones print the text as it is.
+func noteText(s string) string {
+	if plain() {
+		return s
+	}
+	return strings.ReplaceAll(s, "_", `\_`)
 }
 
 // ask runs one form, drawn or line by line.
@@ -638,6 +683,9 @@ func Summary(s settings.Settings, info Info) string {
 	} else if used := home.ChainUse(s.DataDir); used > 0 {
 		fmt.Fprintf(&b, "  keeps     the chain there (%s), and syncs on from it\n", chainHere(s.DataDir, used, info))
 	}
+	if s.IndexUTXOs {
+		fmt.Fprintf(&b, "Index node  indexes Qi UTXOs by address (%s)\n", indexCover(s))
+	}
 	if s.Mining {
 		fmt.Fprintf(&b, "Mining      stratum on ports 3333-3335\n")
 		fmt.Fprintf(&b, "  Quai to   %s\n  Qi to     %s\n", s.QuaiCoinbase, s.QiCoinbase)
@@ -667,6 +715,17 @@ func Summary(s settings.Settings, info Info) string {
 	fmt.Fprintf(&b, "P2P port    %d (TCP and UDP; UPnP forwarding %s)\n", s.P2PPort, onOff(s.PortMap))
 	fmt.Fprintf(&b, "Logs\n%s", services.LogNote(kind, info.Home))
 	return b.String()
+}
+
+// indexCover says which blocks an index node's index covers.
+func indexCover(s settings.Settings) string {
+	switch {
+	case s.RestoreSnapshot:
+		return "from the snapshot's height on"
+	case home.ChainUse(s.DataDir) > 0 && !s.WipeChain:
+		return "from where it started indexing"
+	}
+	return "every block, as it syncs"
 }
 
 func peersNote(s settings.Settings) string {

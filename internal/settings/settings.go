@@ -38,6 +38,11 @@ type Settings struct {
 	WipeChain bool `toml:"-"`
 	P2PPort   int  `toml:"p2p_port"`
 	PortMap   bool `toml:"portmap"` // UPnP/NAT-PMP port forwarding
+	// IndexUTXOs makes this an index node: go-quai keeps an index of each
+	// address's Qi UTXOs (--node.index-address-utxos), which Qi balances
+	// and UTXO lists on its RPC come from. It covers the blocks the node
+	// processes while it is on.
+	IndexUTXOs bool `toml:"index_utxos,omitempty"`
 
 	Mining       bool   `toml:"mining"` // run go-quai's stratum for local miners
 	QuaiCoinbase string `toml:"quai_coinbase,omitempty"`
@@ -215,6 +220,9 @@ func Save(h home.Home, s Settings) error {
 	if err != nil {
 		return err
 	}
+	if err := CheckExtra(h, extra, s); err != nil {
+		return err
+	}
 	for _, d := range []string{h.Dir, h.ConfigDir(), s.DataDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return err
@@ -268,6 +276,9 @@ func NodeConfig(h home.Home, s Settings) map[string]map[string]any {
 	}
 	if s.DBEngine != "" {
 		node["db-engine"] = s.DBEngine
+	}
+	if s.IndexUTXOs {
+		node["index-address-utxos"] = true
 	}
 	if s.Mining {
 		node["quai-coinbases"] = s.QuaiCoinbase
