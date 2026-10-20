@@ -40,11 +40,12 @@ const payloadName = "payload/payload.tar.gz"
 
 // Manifest describes what a payload carries.
 type Manifest struct {
-	GOOS          string `json:"goos"`
-	GOARCH        string `json:"goarch"`
-	GoQuaiVersion string `json:"go_quai_version"`
-	GoQuaiCommit  string `json:"go_quai_commit"`
-	DashVersion   string `json:"dash_version,omitempty"` // empty: no quai-dash for this platform
+	GOOS          string   `json:"goos"`
+	GOARCH        string   `json:"goarch"`
+	GoQuaiVersion string   `json:"go_quai_version"`
+	GoQuaiCommit  string   `json:"go_quai_commit"`
+	GoQuaiPatches []string `json:"go_quai_patches,omitempty"` // quai-node's patches/go-quai it was built with
+	DashVersion   string   `json:"dash_version,omitempty"`    // empty: no quai-dash for this platform
 }
 
 // ErrNoPayload means this quai-node was built without a payload.

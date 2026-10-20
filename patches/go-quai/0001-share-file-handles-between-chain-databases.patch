@@ -1,0 +1,103 @@
+Share the process's file handles between go-quai's chain databases.
+
+One go-quai process opens a chain database each for prime, the region and
+the zone, and gave each of them half of the process's file handles. Three
+halves don't fit: once the chain is big enough that every database keeps
+its share open (Pebble writes 2 MiB tables, so a 285 GB chain is about
+140,000 files), the last database to open runs out ("too many open
+files"). Pebble then can't list its own directory, the database is taken
+for LevelDB, and the zone never starts.
+
+On macOS it came early, because go-quai also capped the process at
+OPEN_MAX (10240) files, whatever launchd allowed: each database got 5120,
+and three needed 15360. Linux, where quai-node's unit allows 65536, would
+have hit it later.
+
+The fix: half the handles are still left for networking, and the other
+half is split between the chain databases (MakeDatabaseHandles takes how
+many). On macOS, the cap is kern.maxfilesperproc, as in Go's runtime.
+
+diff --git a/cmd/utils/flags.go b/cmd/utils/flags.go
+index 6d6e38b..a332a83 100644
+--- a/cmd/utils/flags.go
++++ b/cmd/utils/flags.go
+@@ -1154,8 +1154,9 @@ func setGasLimitCeil(cfg *quaiconfig.Config) {
+ }
+ 
+ // MakeDatabaseHandles raises out the number of allowed file handles per process
+-// for Quai and returns half of the allowance to assign to the database.
+-func MakeDatabaseHandles() int {
++// for Quai and returns half of the allowance, split between the dbs databases
++// the process opens, to assign to each database.
++func MakeDatabaseHandles(dbs int) int {
+ 	limit, err := fdlimit.Maximum()
+ 	if err != nil {
+ 		Fatalf("Failed to retrieve file descriptor allowance: %v", err)
+@@ -1164,7 +1165,15 @@ func MakeDatabaseHandles() int {
+ 	if err != nil {
+ 		Fatalf("Failed to raise file descriptor allowance: %v", err)
+ 	}
+-	return int(raised / 2) // Leave half for networking and other stuff
++	return int(raised / 2 / uint64(dbs)) // Leave half for networking and other stuff
++}
++
++// chainDatabases is the number of chain databases the process opens for an
++// expansion: prime's, one per region, and one per zone. They all draw on the
++// one process's file handles.
++func chainDatabases(expansion uint8) int {
++	regions, zones := common.GetHierarchySizeForExpansionNumber(expansion)
++	return 1 + int(regions) + int(regions)*int(zones)
+ }
+ 
+ // HexAddress converts an account specified directly as a hex encoded string or
+@@ -1537,7 +1546,7 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
+ 	if viper.IsSet(CacheFlag.Name) || viper.IsSet(CacheDatabaseFlag.Name) {
+ 		cfg.DatabaseCache = viper.GetInt(CacheFlag.Name) * viper.GetInt(CacheDatabaseFlag.Name) / 100
+ 	}
+-	cfg.DatabaseHandles = MakeDatabaseHandles()
++	cfg.DatabaseHandles = MakeDatabaseHandles(chainDatabases(currentExpansionNumber))
+ 	if viper.IsSet(AncientDirFlag.Name) {
+ 		cfg.DatabaseFreezer = viper.GetString(AncientDirFlag.Name)
+ 	}
+@@ -1744,7 +1753,7 @@ func SplitTagsFlag(tagsFlag string) map[string]string {
+ func MakeChainDatabase(stack *node.Node, readonly bool) ethdb.Database {
+ 	var (
+ 		cache   = viper.GetInt(CacheFlag.Name) * viper.GetInt(CacheDatabaseFlag.Name) / 100
+-		handles = MakeDatabaseHandles()
++		handles = MakeDatabaseHandles(1)
+ 
+ 		err     error
+ 		chainDb ethdb.Database
+diff --git a/common/fdlimit/fdlimit_darwin.go b/common/fdlimit/fdlimit_darwin.go
+index 6b26fa0..6e7dfe5 100644
+--- a/common/fdlimit/fdlimit_darwin.go
++++ b/common/fdlimit/fdlimit_darwin.go
+@@ -18,7 +18,8 @@ package fdlimit
+ 
+ import "syscall"
+ 
+-// hardlimit is the number of file descriptors allowed at max by the kernel.
++// hardlimit is the number of file descriptors allowed at max by the kernel,
++// when kern.maxfilesperproc can't be read.
+ const hardlimit = 10240
+ 
+ // Raise tries to maximize the file descriptor allowance of this process
+@@ -63,9 +64,15 @@ func Maximum() (int, error) {
+ 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &limit); err != nil {
+ 		return 0, err
+ 	}
+-	// Cap it to OPEN_MAX (10240) because macos is a special snowflake
+-	if limit.Max > hardlimit {
+-		limit.Max = hardlimit
++	// Cap it to kern.maxfilesperproc, the most macOS lets one process open,
++	// as Go's runtime does. OPEN_MAX (10240) is far lower, and three or more
++	// chain databases outgrow it.
++	most := uint64(hardlimit)
++	if n, err := syscall.SysctlUint32("kern.maxfilesperproc"); err == nil && n > 0 {
++		most = uint64(n)
++	}
++	if limit.Max > most {
++		limit.Max = most
+ 	}
+ 	return int(limit.Max), nil
+ }

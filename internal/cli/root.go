@@ -103,6 +103,9 @@ func versionCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("go-quai %s (%s)\n", m.GoQuaiVersion, short(m.GoQuaiCommit))
+			for _, p := range m.GoQuaiPatches {
+				fmt.Printf("  patched: %s\n", p)
+			}
 			if m.DashVersion != "" {
 				fmt.Printf("quai-dash %s\n", m.DashVersion)
 			} else {

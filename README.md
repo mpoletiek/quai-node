@@ -318,6 +318,11 @@ Apple SDK. `scripts/build-payload.sh` documents its knobs (`GO_QUAI_REF`,
 `DASH_VERSION`, …). `.github/workflows/release.yml` builds all five
 platforms on a `v*` tag.
 
+go-quai is built with the patches in `patches/go-quai`, for bugs quai-node's
+users hit that go-quai hasn't fixed yet; `quai-node version` lists them. A
+patch that stops applying to a new go-quai stops the build, so it gets
+looked at again (updated, or dropped once go-quai has the fix).
+
 ## License
 
 quai-node is MIT ([LICENSE](LICENSE)). Its release binaries bundle

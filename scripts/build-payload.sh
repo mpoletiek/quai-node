@@ -1,14 +1,15 @@
 #!/bin/sh
 # Builds the payload quai-node embeds for one OS/arch:
 # internal/bundle/payload/payload.tar.gz, holding go-quai (built from
-# source, with cgo), its VERSION and params, and quai-dash when there is a
-# build of it for the platform.
+# source, with cgo and patches/go-quai), its VERSION and params, and
+# quai-dash when there is a build of it for the platform.
 #
 #   scripts/build-payload.sh GOOS GOARCH
 #
 # Environment:
 #   GO_QUAI_REF      go-quai tag or branch to build (default: latest release tag)
-#   GO_QUAI_SRC      use this go-quai checkout instead of cloning
+#   GO_QUAI_SRC      use this go-quai checkout instead of cloning (it gets
+#                    patches/go-quai applied too)
 #   DASH_VERSION     quai-dash release to bundle (default: latest; "none" to skip)
 #   DASH_FROM_SOURCE 1: build quai-dash from source at DASH_VERSION when its
 #                    release has no archive for the platform (needs cargo)
@@ -65,6 +66,23 @@ fi
 commit=$(git -C "$src" rev-parse HEAD)
 date=$(git -C "$src" log -1 --format=%cd --date=format:%Y%m%d)
 version=$(cat "$src/VERSION")
+
+# quai-node's patches to go-quai (patches/go-quai), for bugs its users hit
+# that go-quai hasn't fixed yet. A checkout that already has a patch (from
+# an earlier build) keeps it; one it no longer applies to stops the build,
+# so each patch is looked at again when go-quai changes.
+patches=
+for p in "$root"/patches/go-quai/*.patch; do
+	[ -f "$p" ] || continue
+	name=$(basename "$p" .patch)
+	if ! git -C "$src" apply --reverse --check "$p" 2>/dev/null; then
+		git -C "$src" apply --check "$p" 2>/dev/null ||
+			die "patch $name doesn't apply to go-quai $version: update it, or remove it if go-quai fixed the bug"
+		say "patching go-quai: $name"
+		git -C "$src" apply "$p"
+	fi
+	patches="$patches${patches:+, }\"$name\""
+done
 
 # The C compiler for cgo: zig for Linux (static, musl) and Windows, from
 # any host; the Mac's own clang for macOS.
@@ -164,6 +182,7 @@ cat >"$work/stage/manifest.json" <<EOF
   "goarch": "$goarch",
   "go_quai_version": "$version",
   "go_quai_commit": "$commit",
+  "go_quai_patches": [$patches],
   "dash_version": "$dash_version"
 }
 EOF
