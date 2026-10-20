@@ -175,14 +175,17 @@ without it they come back zero or empty. Wallets, explorers and similar
 services need it. A node that only syncs and mines doesn't, and it costs
 disk space and work on every block, so it's off unless you choose it.
 
-go-quai indexes the blocks it processes while indexing is on. Turned on
-for a fresh sync, or with "delete it and sync from scratch", the index is
-complete. Turned on for a chain the node already has, or over
-quikshot.dev's snapshot, it starts at that point: Qi received earlier is
-missing and balances come out too low. Setup says which when it asks.
-go-quai's own `reindex` would rebuild it, but it opens the zone database
-as LevelDB, so setup refuses it on a Pebble chain (every snapshot
-restore); on a LevelDB chain it can go in `extra.toml` for one start.
+go-quai indexes the blocks it processes while indexing is on, and quai-node
+doesn't reindex, so an index node's index starts at the chain's first
+block: it syncs the whole chain from the network (days or more), and it
+can't start from quikshot.dev's snapshot. Setup asks about indexing before
+the chain, and for an index node offers only that: keep a chain it indexed
+from the start, or sync one, deleting a chain that wasn't indexed
+(`--index-utxos --from-scratch` unattended). A file in the data directory,
+`.quai-node-indexed`, records that the chain there was indexed from the
+start; deleting or replacing the chain, or turning indexing off, removes
+it, and turning indexing on again then means syncing from scratch.
+`quai-node snapshot restore` refuses on an index node.
 
 ### Keepers on quainode.org
 
@@ -271,7 +274,8 @@ Then `quai-node setup --apply` to rewrite the config and restart the node.
 Setup checks the file first and refuses a table go-quai doesn't have, or a
 key quai-node writes itself (the network, zone, ports, data directory,
 mining, the index and the RPC). Change those in `quai-node.toml`. It also
-refuses `reindex` on a Pebble chain (see [Index nodes](#index-nodes)).
+refuses go-quai's `reindex` on a Pebble chain: that opens the zone
+database as LevelDB.
 
 ## The service
 

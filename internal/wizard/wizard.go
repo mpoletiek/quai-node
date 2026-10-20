@@ -150,10 +150,10 @@ func Run(s *settings.Settings, info Info) error {
 	if err := askPort(s, info); err != nil {
 		return err
 	}
-	if err := askChain(s, info); err != nil {
+	if err := askIndex(s, info); err != nil {
 		return err
 	}
-	if err := askIndex(s, info); err != nil {
+	if err := askChain(s, info); err != nil {
 		return err
 	}
 	if s.Dashboard {
@@ -193,35 +193,76 @@ func Run(s *settings.Settings, info Info) error {
 	return nil
 }
 
-// askIndex asks whether this is an index node, and says how much of the
-// chain its index would cover given the chain choice just made: go-quai
-// indexes the blocks it processes while indexing is on, and quai-node
-// offers no reindex (go-quai's opens the database as LevelDB, and fails
-// on Pebble chains).
+// askIndex asks whether this is an index node. go-quai indexes only the
+// blocks it processes while indexing is on, and quai-node doesn't reindex
+// (go-quai's opens the database as LevelDB, and fails on Pebble chains), so
+// an index node's chain is indexed from its first block: synced from the
+// network, never a snapshot. askChain then offers only that.
 func askIndex(s *settings.Settings, info Info) error {
 	if info.IndexSet {
 		return nil
 	}
-	cover := "Turned on now, it indexes every block as the node syncs, so the index is complete."
+	start := "The index has to start at the chain's first block, so an index node syncs the whole chain from the network (slow: days or more); it can't start from quikshot.dev's snapshot."
 	switch used := home.ChainUse(s.DataDir); {
-	case s.RestoreSnapshot:
-		cover = "With quikshot.dev's snapshot, it indexes only the blocks after the snapshot: Qi received before then is missing, so balances come out too low. " +
-			"For a complete index, sync from scratch instead (slow: days or more)."
-	case used > 0 && !s.WipeChain && s.IndexUTXOs:
-		cover = "This node is already an index node: keep it on, or its index stops at the last block it indexed."
-	case used > 0 && !s.WipeChain:
-		cover = "Turned on for the chain already here, it indexes only the blocks from now on: Qi received before then is missing, so balances come out too low. " +
-			"For a complete index, run setup again and choose to delete the chain and sync from scratch (slow: days or more)."
+	case used > 0 && home.IndexedFromStart(s.DataDir):
+		start = fmt.Sprintf("The chain in %s is indexed from its first block. Turned off, the index stops for good: turning it on again later means syncing from scratch.", s.DataDir)
+	case used > 0:
+		start += fmt.Sprintf(" The chain already in %s wasn't indexed, so it would have to be deleted.", s.DataDir)
 	}
 	return ask(huh.NewGroup(
 		huh.NewNote().Title("Index node").Description(noteText(
 			"An index node keeps an index of every address's Qi UTXOs. Qi balances (quai_getBalance) and UTXO lists "+
 				"(quai_getOutpointsByAddress) on this node's RPC come from it; without it they come back zero or empty. "+
 				"Wallets, explorers and other services need that; a node that only syncs and mines doesn't, so most don't run one. "+
-				"It takes extra disk space and work on every block.\n\n"+cover)),
+				"It takes extra disk space and work on every block.\n\n"+start)),
 		huh.NewConfirm().Title("Run an index node?").
 			Affirmative("Yes, index Qi UTXOs").Negative("No").
 			Value(&s.IndexUTXOs)))
+}
+
+// askIndexChain is the chain step for an index node: its chain must be
+// indexed from the first block, so it keeps such a chain or syncs one from
+// the network.
+func askIndexChain(s *settings.Settings, info Info) error {
+	s.RestoreSnapshot, s.WipeChain = false, false
+	used := home.ChainUse(s.DataDir)
+	switch {
+	case used > 0 && home.IndexedFromStart(s.DataDir):
+		if err := keepOrWipe(s, chainHere(s.DataDir, used, info), used); err != nil {
+			return err
+		}
+	case used > 0:
+		for {
+			wipe := true
+			if err := ask(huh.NewGroup(
+				huh.NewNote().Title("Chain data").Description(fmt.Sprintf(
+					"%s holds a chain (%s) that wasn't indexed from its first block, and an index node's must be.", s.DataDir, chainHere(s.DataDir, used, info))),
+				huh.NewSelect[bool]().Title("What should happen?").Options(
+					huh.NewOption("Delete it and sync from scratch as an index node (slow: days or more)", true),
+					huh.NewOption("Keep it, and don't run an index node", false),
+				).Value(&wipe))); err != nil {
+				return err
+			}
+			if !wipe {
+				s.IndexUTXOs = false
+				return askChain(s, info)
+			}
+			sure, err := confirmWipe(s.DataDir, used)
+			if err != nil {
+				return err
+			}
+			if sure {
+				s.WipeChain = true
+				break
+			}
+		}
+	default:
+		if err := ask(huh.NewGroup(huh.NewNote().Title("Chain data").Description(
+			"As an index node, the node syncs the chain from the network and indexes it from the first block (slow: days or more)."))); err != nil {
+			return err
+		}
+	}
+	return confirmSpace(s, info)
 }
 
 // noteText keeps a note's underscores (quai_getBalance): drawn notes take
@@ -326,6 +367,9 @@ func askMap(s *settings.Settings) error {
 // askChain shows what the chain needs on disk and, for mainnet cyprus1,
 // offers quikshot.dev's snapshot instead of a sync from the network.
 func askChain(s *settings.Settings, info Info) error {
+	if s.IndexUTXOs {
+		return askIndexChain(s, info)
+	}
 	m := info.Snapshot
 	fits := s.Network == "colosseum" && s.ZoneOf() == (quaiaddr.Zone{})
 	used := home.ChainUse(s.DataDir)
@@ -424,17 +468,28 @@ func askChain(s *settings.Settings, info Info) error {
 	}
 	s.RestoreSnapshot = way == "snapshot"
 	s.WipeChain = way == "scratch"
-	if short := info.SpaceShort(*s); short != "" && !info.IgnoreSpace {
-		goOn := false
-		if err := ask(huh.NewGroup(huh.NewConfirm().
-			Title("Not enough disk space: " + short + ". Continue anyway?").
-			Description("Or stop, and run setup again with another data directory, or free some space.").
-			Affirmative("Continue anyway").Negative("Stop").Value(&goOn))); err != nil {
-			return err
-		}
-		if !goOn {
-			return ErrAborted
-		}
+	return confirmSpace(s, info)
+}
+
+// confirmSpace asks whether to go on when the data directory looks too
+// small for the chain.
+func confirmSpace(s *settings.Settings, info Info) error {
+	if info.SpaceShort == nil || info.IgnoreSpace {
+		return nil
+	}
+	short := info.SpaceShort(*s)
+	if short == "" {
+		return nil
+	}
+	goOn := false
+	if err := ask(huh.NewGroup(huh.NewConfirm().
+		Title("Not enough disk space: " + short + ". Continue anyway?").
+		Description("Or stop, and run setup again with another data directory, or free some space.").
+		Affirmative("Continue anyway").Negative("Stop").Value(&goOn))); err != nil {
+		return err
+	}
+	if !goOn {
+		return ErrAborted
 	}
 	return nil
 }
@@ -684,7 +739,7 @@ func Summary(s settings.Settings, info Info) string {
 		fmt.Fprintf(&b, "  keeps     the chain there (%s), and syncs on from it\n", chainHere(s.DataDir, used, info))
 	}
 	if s.IndexUTXOs {
-		fmt.Fprintf(&b, "Index node  indexes Qi UTXOs by address (%s)\n", indexCover(s))
+		fmt.Fprintf(&b, "Index node  indexes every address's Qi UTXOs, from the first block\n")
 	}
 	if s.Mining {
 		fmt.Fprintf(&b, "Mining      stratum on ports 3333-3335\n")
@@ -715,17 +770,6 @@ func Summary(s settings.Settings, info Info) string {
 	fmt.Fprintf(&b, "P2P port    %d (TCP and UDP; UPnP forwarding %s)\n", s.P2PPort, onOff(s.PortMap))
 	fmt.Fprintf(&b, "Logs\n%s", services.LogNote(kind, info.Home))
 	return b.String()
-}
-
-// indexCover says which blocks an index node's index covers.
-func indexCover(s settings.Settings) string {
-	switch {
-	case s.RestoreSnapshot:
-		return "from the snapshot's height on"
-	case home.ChainUse(s.DataDir) > 0 && !s.WipeChain:
-		return "from where it started indexing"
-	}
-	return "every block, as it syncs"
 }
 
 func peersNote(s settings.Settings) string {

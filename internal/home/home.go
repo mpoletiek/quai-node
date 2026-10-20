@@ -17,6 +17,7 @@
 package home
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -112,7 +113,7 @@ func ChainUse(dataDir string) int64 {
 }
 
 // RemoveChain deletes the chain databases in dataDir (prime, region-N,
-// zone-N-M), the ones ChainUse measures.
+// zone-N-M), the ones ChainUse measures, and the index marker with them.
 func RemoveChain(dataDir string) error {
 	for _, pat := range []string{"prime", "region-*", "zone-*"} {
 		dirs, _ := filepath.Glob(filepath.Join(dataDir, pat))
@@ -122,7 +123,44 @@ func RemoveChain(dataDir string) error {
 			}
 		}
 	}
-	return nil
+	return UnmarkIndexed(dataDir)
+}
+
+// indexMarker, in a data directory, says its chain was indexed (go-quai's
+// address index of Qi UTXOs) from its first block. go-quai indexes only the
+// blocks it processes while indexing is on, and quai-node doesn't reindex,
+// so an index node needs a chain made with it on.
+const indexMarker = ".quai-node-indexed"
+
+const indexMarkerText = `quai-node wrote this when the node started this chain as an index node
+(index_utxos): go-quai has indexed every address's Qi UTXOs from the first
+block. quai-node removes it when the chain is deleted or replaced, or
+indexing is turned off.
+`
+
+// IndexedFromStart reports whether the chain in dataDir has been indexed
+// from its first block.
+func IndexedFromStart(dataDir string) bool {
+	_, err := os.Stat(filepath.Join(dataDir, indexMarker))
+	return err == nil
+}
+
+// MarkIndexed records that the chain in dataDir, which must be empty now,
+// is indexed from its first block.
+func MarkIndexed(dataDir string) error {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dataDir, indexMarker), []byte(indexMarkerText), 0o644)
+}
+
+// UnmarkIndexed forgets that the chain in dataDir is indexed.
+func UnmarkIndexed(dataDir string) error {
+	err := os.Remove(filepath.Join(dataDir, indexMarker))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 // ChainEngine is the database engine of the chain in dataDir, "pebble" or

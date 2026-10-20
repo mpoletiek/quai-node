@@ -202,6 +202,9 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
+	if err := checkIndex(s); err != nil {
+		return err
+	}
 	// Turned away now rather than halfway through: Save merges it.
 	extra, err := settings.LoadExtra(h)
 	if err != nil {
@@ -281,6 +284,11 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 		if o.dryRun {
 			fmt.Fprintf(out, "\nRestore quikshot.dev's latest snapshot into %s, then switch go-quai to the Pebble engine\n", s.DataDir)
 		} else if err := restoreSnapshot(out, h, &s, mgr); err != nil {
+			return err
+		}
+	}
+	if !o.dryRun {
+		if err := markIndex(s); err != nil {
 			return err
 		}
 	}
