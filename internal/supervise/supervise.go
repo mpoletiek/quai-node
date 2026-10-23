@@ -29,6 +29,9 @@ type Options struct {
 	// Service is true under a service manager. In a terminal go-quai's
 	// output goes to Out and quai-dash's to its LogFile.
 	Service bool
+	// Alongside, if set, runs while the processes do (it gets Out), and
+	// its context ends when Run stops them.
+	Alongside func(ctx context.Context, out io.Writer)
 }
 
 // Restart delays for a non-critical process; variables for tests.
@@ -58,6 +61,9 @@ func Run(ctx context.Context, specs []services.Spec, o Options) error {
 	fatal := make(chan error, len(specs))
 	var procs []*proc
 	var wg sync.WaitGroup
+	if o.Alongside != nil {
+		go o.Alongside(ctx, o.Out)
+	}
 
 	stopAll := func() {
 		cancel()

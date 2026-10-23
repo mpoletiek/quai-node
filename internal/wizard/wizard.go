@@ -624,7 +624,7 @@ func askKeepers(s *settings.Settings) error {
 				"• The Keepers check the node by calling its RPC, so the RPC listens on every interface and you open TCP 9200 to the internet (forward it on your router). "+
 				"That makes this node a public RPC: anyone can query it or send it transactions (only the net, web3 and quai APIs: no admin, no wallet).\n"+
 				"• Its P2P port, "+fmt.Sprint(s.P2PPort)+", must be reachable too.\n"+
-				"Once it shows up you can claim it (quai-node keepers claim), which signs your tag with the node's key."),
+				"Once it has logged in, the node claims your tag by itself: it signs the tag with the node's key, which the Keepers require before listing it."),
 		huh.NewConfirm().Title("Report this node to the Keepers on quainode.org?").
 			Affirmative("Yes, report it").Negative("No").Value(&on),
 	)); err != nil {

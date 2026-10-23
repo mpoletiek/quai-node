@@ -33,7 +33,7 @@ For when the node isn't a service. (The quai-node service runs
 			}
 			children := services.Children(h, s.Dashboard && !noDash, h.Logs())
 			if asService {
-				return runService(h, children)
+				return runService(h, children, claimer(h, s))
 			}
 			if mgr, err := services.Detect(services.NewRunner(cmd.OutOrStdout(), true)); err == nil {
 				if st, _ := mgr.Status(services.Name); st == services.Running {
@@ -49,7 +49,7 @@ For when the node isn't a service. (The quai-node service runs
 				fmt.Printf("quai-node: dashboard at http://%s (its log: %s)\n", s.DashboardListen, children[1].LogFile)
 			}
 			fmt.Println("quai-node: Ctrl-C stops the node; it may take a minute to close its databases")
-			return supervise.Run(ctx, children, supervise.Options{Out: os.Stdout})
+			return supervise.Run(ctx, children, supervise.Options{Out: os.Stdout, Alongside: claimer(h, s)})
 		},
 	}
 	cmd.Flags().BoolVar(&asService, "service", false, "run under the service manager")

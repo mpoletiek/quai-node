@@ -149,7 +149,7 @@ type Check struct {
 	TS         string `json:"ts"`
 	Trigger    string `json:"trigger"`
 	Outcome    string `json:"outcome"`     // pass, fail or inconclusive
-	StepFailed int    `json:"step_failed"` // 1 census, 2 rpc, 3 head, 4 report/p2p, 5 proof; 0 none
+	StepFailed int    `json:"step_failed"` // 1 census, 2 rpc, 3 head, 4 report/p2p, 5 proof, 6 claim; 0 none
 	Reason     string `json:"reason"`
 }
 
@@ -166,6 +166,8 @@ func (c Check) Step() string {
 		return "report/p2p"
 	case 5:
 		return "proof"
+	case 6:
+		return "claim"
 	}
 	return ""
 }

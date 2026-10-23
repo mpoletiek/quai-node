@@ -347,7 +347,7 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 		fmt.Fprintf(out, "\nKeepers:              reporting to keepers.quainode.org as %s. To be verified there:\n", s.KeepersTag)
 		fmt.Fprintln(out, "  • open TCP 9200 to the internet (forward it on your router, allow it in any firewall);")
 		fmt.Fprintf(out, "  • make sure P2P port %d is reachable too.\n", s.P2PPort)
-		fmt.Fprintln(out, "  Then: quai-node keepers status    (and once it has logged in: quai-node keepers claim)")
+		fmt.Fprintln(out, "  Then: quai-node keepers status    (once it has logged in, the node claims its tag by itself)")
 		fmt.Fprintf(out, "  Your node's page: %s/%s\n", keepers.Page, s.KeepersTag)
 		fmt.Fprintf(out, "  Your tag's secret is in %s; keep it if you move the node.\n", h.Settings())
 	}

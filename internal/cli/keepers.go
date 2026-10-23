@@ -12,6 +12,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
+	"github.com/mpoletiek/quai-node/internal/home"
 	"github.com/mpoletiek/quai-node/internal/keepers"
 	"github.com/mpoletiek/quai-node/internal/settings"
 )
@@ -26,8 +27,10 @@ Setup turns reporting on (quai-node setup, or --keepers-tag).
 'status' shows what the Keepers see: whether the node has logged in,
 passed its checks, and been claimed.
 'claim' signs your tag with the node's p2p key (config/private.key) and
-sends the signature, which ties the tag to this node. The key never
-leaves the machine. It works once the node has logged in.`,
+sends the signature, which ties the tag to this node. The Keepers list a
+node only once it's claimed, and the running node claims by itself once
+it has logged in, so this is for trying it now or reading the answer.
+The key never leaves the machine.`,
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: []string{"status", "claim"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -117,12 +120,27 @@ func keepersStatus(ctx context.Context, out io.Writer, s settings.Settings, full
 	}
 	switch st.Claim {
 	case "none":
-		fmt.Fprintln(out, "            claim it: quai-node keepers claim")
+		fmt.Fprintln(out, "            not claimed yet: the running node claims by itself (to try now: quai-node keepers claim)")
 	case "mismatch":
-		fmt.Fprintln(out, "            the tag is claimed by another node; if this node replaced it: quai-node keepers claim")
+		fmt.Fprintln(out, "            the tag is claimed by another node; if this node replaced it, it claims by itself once the old one has been off the roll for 7 days")
 	}
 	fmt.Fprintf(out, "            %s/%s\n", keepers.Page, s.KeepersTag)
 	return nil
+}
+
+// claimer is the supervisor's Alongside for a node that reports to the
+// Keepers: it claims the tag (keepers.AutoClaim), logging to the node's
+// output. Nil for a node that doesn't report.
+func claimer(h home.Home, s settings.Settings) func(context.Context, io.Writer) {
+	if !s.Reporting() {
+		return nil
+	}
+	key := filepath.Join(h.ConfigDir(), "private.key")
+	return func(ctx context.Context, out io.Writer) {
+		keepers.AutoClaim(ctx, key, s.KeepersTag, s.KeepersSecret, func(format string, a ...any) {
+			fmt.Fprintf(out, "quai-node: "+format+"\n", a...)
+		})
+	}
 }
 
 // lanURLs are the dashboard's addresses on this machine's networks, for a

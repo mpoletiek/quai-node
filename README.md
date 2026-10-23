@@ -197,8 +197,11 @@ in to `keepers.quainode.org` with the tag and a generated secret (kept as
 owner-only) and sends stats every 15 s. The Keepers verify the node through
 its RPC, so the RPC then listens on every interface and you open TCP 9200
 to the internet: the node becomes a public RPC (net, web3 and quai APIs
-only). `quai-node keepers status` shows its checks; `quai-node keepers
-claim` signs the tag with the node's p2p key once it has logged in. The
+only). The Keepers list a node only once its tag is claimed, signed with
+the node's p2p key: the running node does that by itself once it has
+logged in (and logs it), and again after a move once the Keepers allow it.
+`quai-node keepers status` shows its checks; `quai-node keepers claim`
+claims by hand. The
 node's page is `https://quainode.org/nodes/<tag>`, and
 [quainode.org/nodes/status](https://quainode.org/nodes/status) shows the
 service's own state. The Keepers take secrets of 16 to 128 characters (the

@@ -5,6 +5,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -18,6 +19,7 @@ import (
 // program runs the children under the SCM.
 type program struct {
 	children []services.Spec
+	also     func(context.Context, io.Writer)
 	out      *os.File
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -29,7 +31,7 @@ func (p *program) Start(service.Service) error {
 	supervise.Prepare()
 	go func() {
 		defer close(p.done)
-		err := supervise.Run(ctx, p.children, supervise.Options{Out: p.out, Service: true})
+		err := supervise.Run(ctx, p.children, supervise.Options{Out: p.out, Service: true, Alongside: p.also})
 		if err != nil && ctx.Err() == nil {
 			// The node stopped on its own: exit non-zero so the SCM's
 			// restart-on-failure starts the service again.
@@ -48,7 +50,7 @@ func (p *program) Stop(service.Service) error {
 
 // runService runs the children as the Windows service. The SCM keeps no
 // output, so it goes to logs\quai-node.log.
-func runService(h home.Home, children []services.Spec) error {
+func runService(h home.Home, children []services.Spec, also func(context.Context, io.Writer)) error {
 	sp := services.Service(h, "", services.LogDir(h.Dir))
 	if err := os.MkdirAll(filepath.Dir(sp.LogFile), 0o755); err != nil {
 		return err
@@ -58,7 +60,7 @@ func runService(h home.Home, children []services.Spec) error {
 		return err
 	}
 	defer out.Close()
-	svc, err := service.New(&program{children: children, out: out}, services.Config(sp))
+	svc, err := service.New(&program{children: children, also: also, out: out}, services.Config(sp))
 	if err != nil {
 		return err
 	}
