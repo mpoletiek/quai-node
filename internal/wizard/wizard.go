@@ -196,16 +196,23 @@ func Run(s *settings.Settings, info Info) error {
 // askIndex asks whether this is an index node. go-quai indexes only the
 // blocks it processes while indexing is on, and quai-node doesn't reindex
 // (go-quai's opens the database as LevelDB, and fails on Pebble chains), so
-// an index node's chain is indexed from its first block: synced from the
-// network, never a snapshot. askChain then offers only that.
+// an index node's chain is indexed from its first block: restored from a
+// snapshot that carries the index, or synced from the network. askChain
+// then offers only those.
 func askIndex(s *settings.Settings, info Info) error {
 	if info.IndexSet {
 		return nil
 	}
-	start := "The index has to start at the chain's first block, so an index node syncs the whole chain from the network (slow: days or more); it can't start from quikshot.dev's snapshot."
+	snap := indexSnapshot(*s, info)
+	start := "The index has to start at the chain's first block, so an index node syncs the whole chain from the network (slow: days or more)."
+	if snap {
+		start = "The index has to start at the chain's first block. quikshot.dev's snapshot carries it from there, so an index node can start from the snapshot like any other node."
+	}
 	switch used := home.ChainUse(s.DataDir); {
 	case used > 0 && home.IndexedFromStart(s.DataDir):
-		start = fmt.Sprintf("The chain in %s is indexed from its first block. Turned off, the index stops for good: turning it on again later means syncing from scratch.", s.DataDir)
+		start = fmt.Sprintf("The chain in %s is indexed from its first block. Turned off, the index stops for good: turning it on again later means replacing the chain.", s.DataDir)
+	case used > 0 && snap:
+		start += fmt.Sprintf(" The chain already in %s wasn't indexed, so it would be replaced: by the snapshot, or a sync from scratch.", s.DataDir)
 	case used > 0:
 		start += fmt.Sprintf(" The chain already in %s wasn't indexed, so it would have to be deleted.", s.DataDir)
 	}
@@ -220,9 +227,17 @@ func askIndex(s *settings.Settings, info Info) error {
 			Value(&s.IndexUTXOs)))
 }
 
-// askIndexChain is the chain step for an index node: its chain must be
-// indexed from the first block, so it keeps such a chain or syncs one from
-// the network.
+// indexSnapshot reports whether an index node with s can start from
+// quikshot.dev's snapshot: there is one for its network and zone, and it
+// carries the index.
+func indexSnapshot(s settings.Settings, info Info) bool {
+	return info.Snapshot != nil && info.Snapshot.Indexed() && info.SpaceShort != nil &&
+		s.Network == "colosseum" && s.ZoneOf() == (quaiaddr.Zone{})
+}
+
+// askIndexChain is the chain step for an index node with no snapshot to
+// start from: its chain must be indexed from the first block, so it keeps
+// such a chain or syncs one from the network.
 func askIndexChain(s *settings.Settings, info Info) error {
 	s.RestoreSnapshot, s.WipeChain = false, false
 	used := home.ChainUse(s.DataDir)
@@ -366,8 +381,12 @@ func askMap(s *settings.Settings) error {
 
 // askChain shows what the chain needs on disk and, for mainnet cyprus1,
 // offers quikshot.dev's snapshot instead of a sync from the network.
+//
+// An index node's chain must be indexed from its first block: it can keep
+// one that is, or start from the snapshot, which carries the index, or
+// from scratch.
 func askChain(s *settings.Settings, info Info) error {
-	if s.IndexUTXOs {
+	if s.IndexUTXOs && !indexSnapshot(*s, info) {
 		return askIndexChain(s, info)
 	}
 	m := info.Snapshot
@@ -396,8 +415,12 @@ func askChain(s *settings.Settings, info Info) error {
 	if used > 0 {
 		have = chainHere(s.DataDir, used, info)
 	}
+	// An index node can't keep a chain that wasn't indexed.
+	unindexed := s.IndexUTXOs && have != "" && !home.IndexedFromStart(s.DataDir)
 	var note string
 	switch {
+	case unindexed:
+		note = fmt.Sprintf("%s holds a chain (%s) that wasn't indexed from its first block, and an index node's must be. Quai mainnet's chain is about %s today, and %s has %s free.", s.DataDir, have, size, s.DataDir, free)
 	case have != "":
 		note = fmt.Sprintf("%s already holds a chain: %s. Quai mainnet's chain is about %s today, and %s has %s free.", s.DataDir, have, size, s.DataDir, free)
 	case fits:
@@ -411,7 +434,7 @@ func askChain(s *settings.Settings, info Info) error {
 	switch {
 	case have != "":
 		way = "keep"
-		if s.RestoreSnapshot {
+		if s.RestoreSnapshot || unindexed {
 			way = "snapshot"
 		}
 	case fits:
@@ -428,9 +451,19 @@ func askChain(s *settings.Settings, info Info) error {
 		if !m.RestoreTested {
 			desc += "quikshot.dev hasn't test-restored this snapshot; you restore at your own risk. "
 		}
+		if s.IndexUTXOs {
+			desc += "The snapshot carries the index of Qi UTXOs from the chain's first block. "
+		}
 		snap := fmt.Sprintf("%s download, from %s ago", humanize.Bytes(uint64(m.SizeBytes)), m.Age())
 		var opts []huh.Option[string]
-		if have != "" {
+		if unindexed {
+			desc += "Replacing the chain here needs room for the whole snapshot beside it until the download checks out. "
+			opts = []huh.Option[string]{
+				huh.NewOption(fmt.Sprintf("Replace it with quikshot.dev's snapshot (%s), then sync the rest", snap), "snapshot"),
+				huh.NewOption("Delete it and sync from scratch as an index node (slow: days or more)", "scratch"),
+				huh.NewOption("Keep it, and don't run an index node", "keep"),
+			}
+		} else if have != "" {
 			desc += "Replacing the chain here needs room for the whole snapshot beside it until the download checks out. "
 			opts = []huh.Option[string]{
 				huh.NewOption("Keep the chain that's here and sync on from it", "keep"),
@@ -465,6 +498,12 @@ func askChain(s *settings.Settings, info Info) error {
 			break
 		}
 		way = "keep"
+		if unindexed {
+			way = "snapshot"
+		}
+	}
+	if unindexed && way == "keep" {
+		s.IndexUTXOs = false
 	}
 	s.RestoreSnapshot = way == "snapshot"
 	s.WipeChain = way == "scratch"

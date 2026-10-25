@@ -133,8 +133,9 @@ func RemoveChain(dataDir string) error {
 const indexMarker = ".quai-node-indexed"
 
 const indexMarkerText = `quai-node wrote this when the node started this chain as an index node
-(index_utxos): go-quai has indexed every address's Qi UTXOs from the first
-block. quai-node removes it when the chain is deleted or replaced, or
+(index_utxos), syncing it from scratch or from a quikshot.dev snapshot that
+carries the index: go-quai has indexed every address's Qi UTXOs from the
+first block. quai-node removes it when the chain is deleted or replaced, or
 indexing is turned off.
 `
 
@@ -145,8 +146,9 @@ func IndexedFromStart(dataDir string) bool {
 	return err == nil
 }
 
-// MarkIndexed records that the chain in dataDir, which must be empty now,
-// is indexed from its first block.
+// MarkIndexed records that the chain in dataDir, which must be empty now
+// or just restored from a snapshot that carries the index, is indexed from
+// its first block.
 func MarkIndexed(dataDir string) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err

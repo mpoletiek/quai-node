@@ -177,15 +177,19 @@ disk space and work on every block, so it's off unless you choose it.
 
 go-quai indexes the blocks it processes while indexing is on, and quai-node
 doesn't reindex, so an index node's index starts at the chain's first
-block: it syncs the whole chain from the network (days or more), and it
-can't start from quikshot.dev's snapshot. Setup asks about indexing before
-the chain, and for an index node offers only that: keep a chain it indexed
-from the start, or sync one, deleting a chain that wasn't indexed
-(`--index-utxos --from-scratch` unattended). A file in the data directory,
+block. quikshot.dev's snapshots carry the index from there (since its
+snapshot of October 24, 2026), so on mainnet cyprus1 an index node can
+start from the snapshot like any other node; elsewhere it syncs the whole
+chain from the network (days or more). Setup asks about indexing before the
+chain, and for an index node offers only chains indexed from the start:
+keep one, start from the snapshot, or sync from scratch, replacing a chain
+that wasn't indexed (`--index-utxos --snapshot` or `--index-utxos
+--from-scratch` unattended). A file in the data directory,
 `.quai-node-indexed`, records that the chain there was indexed from the
-start; deleting or replacing the chain, or turning indexing off, removes
-it, and turning indexing on again then means syncing from scratch.
-`quai-node snapshot restore` refuses on an index node.
+start; deleting the chain, restoring a snapshot as a node that doesn't
+index, or turning indexing off removes it, and turning indexing on again
+then means replacing the chain. `quai-node snapshot restore` on an index
+node keeps it indexed.
 
 ### Keepers on quainode.org
 

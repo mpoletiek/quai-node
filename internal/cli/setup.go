@@ -202,7 +202,7 @@ func runSetup(cmd *cobra.Command, o setupOpts) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
-	if err := checkIndex(s); err != nil {
+	if err := checkIndex(s, snap); err != nil {
 		return err
 	}
 	// Turned away now rather than halfway through: Save merges it.

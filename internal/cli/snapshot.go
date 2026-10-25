@@ -71,9 +71,6 @@ func restoreSnapshot(out io.Writer, h home.Home, s *settings.Settings, mgr servi
 	if !snapshotFits(*s) {
 		return errors.New("quikshot.dev's snapshots are for mainnet (colosseum) nodes running cyprus1")
 	}
-	if s.IndexUTXOs {
-		return fmt.Errorf("%w (quai-node setup --index-utxos=false to stop indexing first)", errIndexSnapshot)
-	}
 	// The engine switch is saved after the download, with extra.toml merged
 	// in: a file Save would refuse is turned away before the chain is touched.
 	extra, err := settings.LoadExtra(h)
@@ -90,6 +87,9 @@ func restoreSnapshot(out io.Writer, h home.Home, s *settings.Settings, mgr servi
 	cancel()
 	if err != nil {
 		return fmt.Errorf("quikshot.dev: %w", err)
+	}
+	if s.IndexUTXOs && !m.Indexed() {
+		return errIndexSnapshot
 	}
 	if short := spaceShort(*s, &m); short != "" {
 		return errors.New(short)
@@ -133,9 +133,14 @@ func restoreSnapshot(out io.Writer, h home.Home, s *settings.Settings, mgr servi
 		return fmt.Errorf("snapshot restore: %w (the chain data is as it was)", err)
 	}
 	// The chains are Pebble now: switch the engine to match, and only now.
-	// They aren't indexed.
+	// An index node's chain is indexed from its first block, as the
+	// snapshot is; another node's index stops at the snapshot.
 	s.DBEngine = "pebble"
-	if err := home.UnmarkIndexed(s.DataDir); err != nil {
+	mark := home.UnmarkIndexed
+	if s.IndexUTXOs {
+		mark = home.MarkIndexed
+	}
+	if err := mark(s.DataDir); err != nil {
 		return err
 	}
 	if err := settings.Save(h, *s); err != nil {

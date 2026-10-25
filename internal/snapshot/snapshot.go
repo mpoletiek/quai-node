@@ -80,6 +80,15 @@ func (m Manifest) Age() string {
 // ZoneHeight is the snapshot's zone-0-0 height.
 func (m Manifest) ZoneHeight() int64 { return m.BlockHeights["zone-0-0"] }
 
+// indexedSince is quikshot.dev's first snapshot with go-quai's address
+// index of Qi UTXOs (node.index-address-utxos) built from the chain's first
+// block; its snapshots carry it from then on. A variable for tests.
+var indexedSince = time.Date(2026, 10, 24, 11, 0, 33, 0, time.UTC)
+
+// Indexed reports whether the snapshot carries the address index of Qi
+// UTXOs from the chain's first block, so an index node can start from it.
+func (m Manifest) Indexed() bool { return !m.Created.Before(indexedSince) }
+
 var client = &http.Client{Timeout: 20 * time.Second}
 
 // Latest fetches and checks the newest snapshot's manifest. It is for
