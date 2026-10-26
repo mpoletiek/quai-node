@@ -329,6 +329,8 @@ go-quai is built with the patches in `patches/go-quai`, for bugs quai-node's
 users hit that go-quai hasn't fixed yet; `quai-node version` lists them. A
 patch that stops applying to a new go-quai stops the build, so it gets
 looked at again (updated, or dropped once go-quai has the fix).
+[`patches/go-quai/README.md`](patches/go-quai/README.md) explains each one
+for go-quai's developers, with other go-quai bugs quai-node has found.
 
 ## License
 
