@@ -177,8 +177,8 @@ disk space and work on every block, so it's off unless you choose it.
 
 go-quai indexes the blocks it processes while indexing is on, and quai-node
 doesn't reindex, so an index node's index starts at the chain's first
-block. quikshot.dev's snapshots carry the index from there (since its
-snapshot of October 24, 2026), so on mainnet cyprus1 an index node can
+block. quikshot.dev's snapshots carry the index from there (its manifest
+says so with `"indexed": true`), so on mainnet cyprus1 an index node can
 start from the snapshot like any other node; elsewhere it syncs the whole
 chain from the network (days or more). Setup asks about indexing before the
 chain, and for an index node offers only chains indexed from the start:

@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -182,6 +183,17 @@ func TestManifestCheck(t *testing.T) {
 		bad(&m)
 		if m.check() == nil {
 			t.Errorf("accepted %+v", m)
+		}
+	}
+}
+
+// A manifest says whether its snapshot carries the index; one that doesn't
+// say doesn't.
+func TestManifestIndexed(t *testing.T) {
+	for doc, want := range map[string]bool{`{"indexed": true}`: true, `{"indexed": false}`: false, `{}`: false} {
+		var m Manifest
+		if err := json.Unmarshal([]byte(doc), &m); err != nil || m.Indexed != want {
+			t.Errorf("%s: Indexed %v, %v", doc, m.Indexed, err)
 		}
 	}
 }

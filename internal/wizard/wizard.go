@@ -231,7 +231,7 @@ func askIndex(s *settings.Settings, info Info) error {
 // quikshot.dev's snapshot: there is one for its network and zone, and it
 // carries the index.
 func indexSnapshot(s settings.Settings, info Info) bool {
-	return info.Snapshot != nil && info.Snapshot.Indexed() && info.SpaceShort != nil &&
+	return info.Snapshot != nil && info.Snapshot.Indexed && info.SpaceShort != nil &&
 		s.Network == "colosseum" && s.ZoneOf() == (quaiaddr.Zone{})
 }
 

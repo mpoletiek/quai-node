@@ -26,7 +26,7 @@ func checkIndex(s settings.Settings, snap *snapshot.Manifest) error {
 	case !s.IndexUTXOs:
 		return nil
 	case s.RestoreSnapshot:
-		if snap != nil && !snap.Indexed() {
+		if snap != nil && !snap.Indexed {
 			return errIndexSnapshot
 		}
 	case !s.WipeChain && home.ChainUse(s.DataDir) > 0 && !home.IndexedFromStart(s.DataDir):

@@ -88,7 +88,7 @@ func restoreSnapshot(out io.Writer, h home.Home, s *settings.Settings, mgr servi
 	if err != nil {
 		return fmt.Errorf("quikshot.dev: %w", err)
 	}
-	if s.IndexUTXOs && !m.Indexed() {
+	if s.IndexUTXOs && !m.Indexed {
 		return errIndexSnapshot
 	}
 	if short := spaceShort(*s, &m); short != "" {

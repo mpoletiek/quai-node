@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/mpoletiek/quai-node/internal/home"
 	"github.com/mpoletiek/quai-node/internal/settings"
@@ -43,11 +42,8 @@ func TestIndexFromStart(t *testing.T) {
 	// A snapshot that carries the index will do (or one not known yet: the
 	// restore checks it); one that doesn't, won't.
 	s.RestoreSnapshot = true
-	indexed := &snapshot.Manifest{Created: time.Now()}
-	old := &snapshot.Manifest{Created: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)}
-	if !indexed.Indexed() || old.Indexed() {
-		t.Fatalf("Indexed: new %v, old %v", indexed.Indexed(), old.Indexed())
-	}
+	indexed := &snapshot.Manifest{Indexed: true}
+	old := &snapshot.Manifest{}
 	for _, snap := range []*snapshot.Manifest{nil, indexed} {
 		if err := checkIndex(s, snap); err != nil {
 			t.Errorf("index node with an indexed snapshot: %v", err)
