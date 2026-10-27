@@ -11,6 +11,7 @@
 //	  dash/config.toml      quai-dash's config (--config)
 //	  data/                 chain data (default; setup can move it)
 //	  nodelogs/             written by go-quai in its working directory
+//	  run/                  the running go-quai's and quai-dash's pids
 //
 // go-quai is always started with <home> as its working directory, because
 // it reads VERSION and params/*.json from there and writes nodelogs/ there.
@@ -84,6 +85,7 @@ func (h Home) DashConfig() string  { return filepath.Join(h.DashDir(), "config.t
 func (h Home) DefaultData() string { return filepath.Join(h.Dir, "data") }
 func (h Home) NodeLogs() string    { return filepath.Join(h.Dir, "nodelogs") }
 func (h Home) Logs() string        { return filepath.Join(h.Dir, "logs") }
+func (h Home) RunDir() string      { return filepath.Join(h.Dir, "run") }
 func (h Home) BundleStamp() string { return filepath.Join(h.Dir, ".bundle") }
 
 // Exists reports whether setup has run here.

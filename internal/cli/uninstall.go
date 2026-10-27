@@ -38,7 +38,7 @@ chain data directory.`,
 			} else {
 				// quai-node.toml stays: it records where the chain data
 				// is, for a later setup or uninstall --purge.
-				doomed = []string{h.BinDir(), h.DashDir(), h.BundleStamp(),
+				doomed = []string{h.BinDir(), h.DashDir(), h.RunDir(), h.BundleStamp(),
 					filepath.Join(h.Dir, "VERSION"), filepath.Join(h.Dir, "params")}
 			}
 			fmt.Fprintln(out, "This removes the quai-node service, if installed, and:")

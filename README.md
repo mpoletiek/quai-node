@@ -298,6 +298,13 @@ go-quai and quai-dash:
   minutes while it keeps failing. The node runs on.
 - A stop interrupts quai-dash, then go-quai, which gets 300 s to close
   its databases.
+- A start waits for the go-quai and quai-dash of the previous start to
+  exit (their pids are in `<home>/run/`), killing one still running after
+  its 300 s. A restart can otherwise start a second go-quai on the same
+  databases, which fails on their locks.
+- On macOS the service runs as a standard process, not a background one:
+  macOS throttles a background process's CPU and disk, which go-quai can't
+  keep up under.
 
 | | service file | its output |
 |---|---|---|

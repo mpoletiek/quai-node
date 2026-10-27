@@ -15,6 +15,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +41,7 @@ var (
 	firstDelay = 10 * time.Second
 	maxDelay   = 5 * time.Minute
 	healthy    = 10 * time.Minute // a run this long resets the delay
+	pollEvery  = time.Second      // how often waitPrevious looks again
 )
 
 type proc struct {
@@ -80,7 +83,7 @@ func Run(ctx context.Context, specs []services.Spec, o Options) error {
 
 	for _, sp := range specs {
 		p := &proc{spec: sp, opts: o}
-		if err := p.start(); err != nil {
+		if err := p.start(ctx); err != nil {
 			if sp.Critical {
 				stopAll()
 				return err
@@ -106,11 +109,13 @@ func Run(ctx context.Context, specs []services.Spec, o Options) error {
 	return err
 }
 
-// start starts the process unless stop was called.
-func (p *proc) start() error {
+// start starts the process unless stop was called or ctx ends while the
+// previous run is still exiting.
+func (p *proc) start(ctx context.Context) error {
+	p.waitPrevious(ctx)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.stopped {
+	if p.stopped || ctx.Err() != nil {
 		return nil
 	}
 	cmd := exec.Command(p.spec.Exec, p.spec.Args...)
@@ -128,16 +133,83 @@ func (p *proc) start() error {
 		return fmt.Errorf("start %s: %w", p.spec.Name, err)
 	}
 	fmt.Fprintf(p.opts.Out, "quai-node: started %s (pid %d)\n", p.spec.Name, cmd.Process.Pid)
+	p.writePid(cmd.Process.Pid)
 	done := make(chan struct{})
 	p.cmd, p.done = cmd, done
 	go func() {
 		err := cmd.Wait()
+		p.clearPid(cmd.Process.Pid)
 		p.mu.Lock()
 		p.err = err
 		p.mu.Unlock()
 		close(done)
 	}()
 	return nil
+}
+
+// waitPrevious waits for the previous run of the program in this home, as
+// its pid file records, to exit. A service restart can start quai-node again
+// while the go-quai it started before is still closing its databases
+// (launchd doesn't wait for it), and the new go-quai then dies on the old
+// one's database locks. A previous run still going after StopTimeout is
+// killed, as its own supervisor would have.
+func (p *proc) waitPrevious(ctx context.Context) {
+	if p.spec.PidFile == "" {
+		return
+	}
+	b, err := os.ReadFile(p.spec.PidFile)
+	if err != nil {
+		return
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 || !running(pid, p.spec.Exec) {
+		return
+	}
+	fmt.Fprintf(p.opts.Out, "quai-node: waiting for the previous %s (pid %d) to exit\n", p.spec.Name, pid)
+	deadline := time.Now().Add(time.Duration(p.spec.StopTimeout) * time.Second)
+	killed := false
+	for running(pid, p.spec.Exec) {
+		if time.Now().After(deadline) {
+			if killed {
+				fmt.Fprintf(p.opts.Out, "quai-node: the previous %s (pid %d) won't exit; starting anyway\n", p.spec.Name, pid)
+				return
+			}
+			fmt.Fprintf(p.opts.Out, "quai-node: the previous %s (pid %d) is still running after %ds; killing it\n",
+				p.spec.Name, pid, p.spec.StopTimeout)
+			kill(pid)
+			killed, deadline = true, time.Now().Add(10*time.Second)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(pollEvery):
+		}
+	}
+}
+
+// writePid records the run's pid; a failure only costs the next start its
+// wait, so it is reported and otherwise ignored.
+func (p *proc) writePid(pid int) {
+	if p.spec.PidFile == "" {
+		return
+	}
+	err := os.MkdirAll(filepath.Dir(p.spec.PidFile), 0o755)
+	if err == nil {
+		err = os.WriteFile(p.spec.PidFile, []byte(strconv.Itoa(pid)+"\n"), 0o644)
+	}
+	if err != nil {
+		fmt.Fprintf(p.opts.Out, "quai-node: %s's pid file: %v\n", p.spec.Name, err)
+	}
+}
+
+// clearPid removes the pid file if it is still this run's.
+func (p *proc) clearPid(pid int) {
+	if p.spec.PidFile == "" {
+		return
+	}
+	if b, err := os.ReadFile(p.spec.PidFile); err == nil && strings.TrimSpace(string(b)) == strconv.Itoa(pid) {
+		_ = os.Remove(p.spec.PidFile)
+	}
 }
 
 // output is where the process writes: Out, or in a terminal its LogFile
@@ -196,7 +268,7 @@ func (p *proc) watch(ctx context.Context, fatal chan<- error) {
 			return
 		case <-time.After(delay):
 		}
-		if err := p.start(); err != nil {
+		if err := p.start(ctx); err != nil {
 			fmt.Fprintf(p.opts.Out, "quai-node: %v\n", err)
 		}
 		delay = min(delay*2, maxDelay)

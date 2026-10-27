@@ -48,6 +48,11 @@ func esc(s string) string {
 	return b.String()
 }
 
+// Render writes the agent's plist. ProcessType is Standard, set outright:
+// Background throttles the node's CPU and disk I/O as macOS does for
+// background tasks (and leaving the key out still applies light limits).
+// Under that, two Macs' nodes stalled for good at the snapshot head, on a
+// deadlock in go-quai's zone that a slow process makes likelier.
 func (l *launchd) Render(sp Spec) (string, string, error) {
 	var args strings.Builder
 	for _, a := range append([]string{sp.Exec}, sp.Args...) {
@@ -77,7 +82,7 @@ func (l *launchd) Render(sp Spec) (string, string, error) {
 	<key>ExitTimeOut</key>
 	<integer>%d</integer>
 	<key>ProcessType</key>
-	<string>Background</string>
+	<string>Standard</string>
 	<key>SoftResourceLimits</key>
 	<dict>
 		<key>NumberOfFiles</key>

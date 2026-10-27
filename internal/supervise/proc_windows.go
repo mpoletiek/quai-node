@@ -27,3 +27,9 @@ func Prepare() {
 }
 
 var allocConsole = windows.NewLazySystemDLL("kernel32.dll").NewProc("AllocConsole")
+
+// running is false: the Windows service manager waits for quai-node, which
+// waits for its children, before it starts the service again.
+func running(pid int, program string) bool { return false }
+
+func kill(pid int) {}

@@ -42,8 +42,9 @@ type Spec struct {
 	StopTimeout int      // seconds to wait after the stop signal
 
 	// For supervised processes:
-	Critical    bool // its exit stops the service (else it is restarted alone)
-	QuietStdout bool // drop stdout: go-quai copies its whole log there
+	Critical    bool   // its exit stops the service (else it is restarted alone)
+	QuietStdout bool   // drop stdout: go-quai copies its whole log there
+	PidFile     string // records its pid, so its next start waits for this run to end
 }
 
 // Status of an installed service.
@@ -140,6 +141,7 @@ func Children(h home.Home, dashboard bool, logDir string) []Spec {
 		StopTimeout: nodeStopTimeout,
 		Critical:    true,
 		QuietStdout: true,
+		PidFile:     filepath.Join(h.RunDir(), Node+".pid"),
 	}}
 	if dashboard {
 		out = append(out, Spec{
@@ -149,6 +151,7 @@ func Children(h home.Home, dashboard bool, logDir string) []Spec {
 			Dir:         h.Dir,
 			LogFile:     filepath.Join(logDir, Dash+".log"),
 			StopTimeout: 10,
+			PidFile:     filepath.Join(h.RunDir(), Dash+".pid"),
 		})
 	}
 	return out
