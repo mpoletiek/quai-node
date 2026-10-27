@@ -58,7 +58,9 @@ irm https://raw.githubusercontent.com/mpoletiek/quai-node/main/uninstall.ps1 | i
 This stops and removes the service and the programs. The chain data, the
 node's key, logs and settings stay, so installing again picks up where the
 node left off; `| sh -s -- --purge` (`$env:QUAI_NODE_ARGS='--purge'`)
-deletes those too.
+deletes those too. If you already deleted quai-node's folder by hand,
+either script still removes the service and what quai-node left on your
+PATH.
 
 ## Platforms
 
