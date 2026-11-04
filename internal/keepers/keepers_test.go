@@ -16,15 +16,19 @@ import (
 )
 
 func TestTagAndFlag(t *testing.T) {
-	for _, ok := range []string{"abc", "Node_1.x-y", "a23456789012345678901234"} {
+	for _, ok := range []string{"abc", "Node_1.x-y", "a23456789012345678901234", "MyQuaiNode", "nodekeeper"} {
 		if CheckTag(ok) != nil {
 			t.Errorf("rejected %q", ok)
 		}
 	}
-	for _, bad := range []string{"ab", "-abc", "has space", "a234567890123456789012345", "émile"} {
+	for _, bad := range []string{"ab", "-abc", "has space", "a234567890123456789012345", "émile",
+		"status", "Claim", "QuaiNode", "admin1", "adm1n", "QuaiOfficial", "my-support", "qu-ai.network"} {
 		if CheckTag(bad) == nil {
 			t.Errorf("accepted %q", bad)
 		}
+	}
+	if CheckTagFormat("QuaiOfficial") != nil {
+		t.Error("CheckTagFormat refused a well-formed tag")
 	}
 	if got := StatsFlag("tag", "sec", 9200); got != "tag:sec@keepers.quainode.org" {
 		t.Errorf("StatsFlag = %s", got)

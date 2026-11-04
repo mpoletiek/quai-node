@@ -152,7 +152,8 @@ func (s Settings) Validate() error {
 		return fmt.Errorf("dashboard_listen %q: expected HOST:PORT", s.DashboardListen)
 	}
 	if s.Reporting() {
-		if err := keepers.CheckTag(s.KeepersTag); err != nil {
+		// the format only: a tag the Keepers refuse still lets the node run
+		if err := keepers.CheckTagFormat(s.KeepersTag); err != nil {
 			return fmt.Errorf("keepers_tag %q: %w", s.KeepersTag, err)
 		}
 		if n := len(s.KeepersSecret); n < 16 || n > 128 {

@@ -683,7 +683,7 @@ func askKeepers(s *settings.Settings) error {
 		title += " (Enter for " + def + ")"
 	}
 	if err := ask(huh.NewGroup(huh.NewInput().Title(title).
-		Description("3 to 24 letters, digits, '.', '_' or '-'. The first login reserves it for this node.").
+		Description("3 to 24 letters, digits, '.', '_' or '-' (rules: quainode.org/nodes#tags). The first login reserves it for this node.").
 		Value(&tag).
 		Validate(func(v string) error {
 			if strings.TrimSpace(v) == "" && plain() {

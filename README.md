@@ -211,9 +211,14 @@ claims by hand. The
 node's page is `https://quainode.org/nodes/<tag>`, and
 [quainode.org/nodes/status](https://quainode.org/nodes/status) shows the
 service's own state. The Keepers take secrets of 16 to 128 characters (the
-generated one has 26) and refuse some reserved tags: if `quai-node keepers
-status` never sees the node log in although TCP 9200 is open, try another
-tag. `claim` prints the Keepers' own answer.
+generated one has 26) and have rules for tags, listed at
+[quainode.org/nodes#tags](https://quainode.org/nodes#tags): 3 to 24
+letters, digits, `.`, `_` or `-`, no reserved names (`admin`, `quai`,
+`status`, …) or words like `official` and `support`, and nothing that
+differs from a taken tag only by case, separators or 0/o, 1/l/i. Setup
+checks all but the last; if `quai-node keepers status` never sees the node
+log in although TCP 9200 is open, the tag may be too close to a taken one,
+so try another. `claim` prints the Keepers' own answer.
 
 The Keepers used to be on quaination.xyz. Installs that reported there
 move over by themselves on the next `quai-node setup` or update: the tag

@@ -482,6 +482,11 @@ func applyFlags(cmd *cobra.Command, s *settings.Settings, o setupOpts, m bundle.
 		s.DashboardListen = net.JoinHostPort(host, s.DashboardPort())
 	}
 	if o.keepersTag != "" {
+		if o.keepersTag != s.KeepersTag {
+			if err := keepers.CheckTag(o.keepersTag); err != nil {
+				return fmt.Errorf("--keepers-tag %q: %w (rules: %s#tags)", o.keepersTag, err, keepers.Page)
+			}
+		}
 		if o.keepersTag != s.KeepersTag || s.KeepersSecret == "" {
 			s.KeepersSecret = keepers.NewSecret()
 		}

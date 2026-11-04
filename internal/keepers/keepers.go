@@ -41,12 +41,62 @@ const (
 // TagRE is a valid tag (the tag in the Keepers' claim message).
 var TagRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{2,23}$`)
 
-// CheckTag explains an invalid tag.
-func CheckTag(tag string) error {
+// CheckTagFormat explains a tag that isn't one at all.
+func CheckTagFormat(tag string) error {
 	if !TagRE.MatchString(tag) {
 		return errors.New("3 to 24 letters, digits, '.', '_' or '-', starting with a letter or digit")
 	}
 	return nil
+}
+
+// The names the Keepers refuse for a new tag: exact ones (their routes, or
+// names that read as official), and words no tag may contain. These are the
+// Keepers' lists (validateTag in quai-node-www's keepers/nodes.go; the rules
+// are at https://quainode.org/nodes#tags), checked here because go-quai's
+// log doesn't say why a login was refused.
+var (
+	tagTaken = []string{"status", "claim", "keeper", "keepers", "badge", "card", "seal", "og", "api", "v1",
+		"nodes", "node", "admin", "root", "quai", "qi", "quainode", "staff", "team", "null", "undefined"}
+	tagBanned = []string{"official", "dominant", "foundation", "admin", "pelagus", "support", "moderator",
+		"quainetwork", "quai-network", "quai_network", "quai.network", "quaination", "qu.ai"}
+)
+
+// CheckTag explains a tag the Keepers would refuse as a new tag. Only they
+// can tell one that's too close to a tag already taken.
+func CheckTag(tag string) error {
+	if err := CheckTagFormat(tag); err != nil {
+		return err
+	}
+	k, sk := strings.ToLower(tag), skeleton(tag)
+	for _, t := range tagTaken {
+		if k == t || sk == t {
+			return fmt.Errorf("%q is reserved by the Keepers", tag)
+		}
+	}
+	for _, p := range tagBanned {
+		if strings.Contains(k, p) || len(skeleton(p)) >= 5 && strings.Contains(sk, skeleton(p)) {
+			return fmt.Errorf("a tag can't contain %q", p)
+		}
+	}
+	return nil
+}
+
+// skeleton is what a tag looks like, as the Keepers compare tags: case,
+// '.', '_', '-' and the lookalikes 0/o and 1/l/i don't count.
+func skeleton(tag string) string {
+	var b strings.Builder
+	for _, c := range strings.ToLower(tag) {
+		switch c {
+		case '.', '_', '-':
+		case '0':
+			b.WriteByte('o')
+		case '1', 'i':
+			b.WriteByte('l')
+		default:
+			b.WriteRune(c)
+		}
+	}
+	return b.String()
 }
 
 // NewSecret is a random secret for the tag: 26 base32 characters (130 bits).
