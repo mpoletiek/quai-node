@@ -116,7 +116,11 @@ say "building go-quai $version ($commit) for $goos/$goarch"
 		-o "$work/stage/go-quai$exe" ./cmd/go-quai
 )
 cp "$src/VERSION" "$work/stage/VERSION"
-cp "$src/params/genesis_alloc.json" "$src/params/forfeiture_addresses.json" "$work/stage/params/"
+# Every params/*.json: go-quai reads them from its working directory at
+# start, and a release can add one (v0.57.0's founder forfeiture list,
+# without which a cyprus1 node won't start).
+cp "$src"/params/*.json "$work/stage/params/"
+[ -f "$work/stage/params/genesis_alloc.json" ] || die "go-quai $version has no params/genesis_alloc.json"
 
 # --------------------------------------------------------------- quai-dash
 

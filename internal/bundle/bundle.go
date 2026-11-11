@@ -7,8 +7,7 @@
 //	manifest.json
 //	go-quai[.exe]
 //	VERSION
-//	params/genesis_alloc.json
-//	params/forfeiture_addresses.json
+//	params/*.json            (genesis_alloc.json, the forfeiture lists, ...)
 //	quai-dash[.exe]          (only where a quai-dash build exists)
 package bundle
 
