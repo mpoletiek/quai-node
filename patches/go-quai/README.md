@@ -9,7 +9,7 @@ it gets looked at again: updated, or deleted once go-quai has the fix.
 This file is for go-quai's developers ([dominant-strategies/go-quai][repo]).
 Each section below can be pasted into an upstream issue as it stands: what
 users see, why, how to reproduce it, and the fix. Line references are to
-go-quai [v0.57.0][v0.57.0], unpatched.
+go-quai [v0.57.1][v0.57.1], unpatched.
 
 | Issue | Patch | In quai-node since | Reported upstream |
 |---|---|---|---|
@@ -116,14 +116,14 @@ the Qi UTXO index of the quikshot.dev Pebble snapshot of October 24, 2026
 (zone height 10,782,844): all 856,463 UTXOs were found in the index.
 
 [repo]: https://github.com/dominant-strategies/go-quai
-[v0.57.0]: https://github.com/dominant-strategies/go-quai/tree/v0.57.0
-[handles]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/cmd/utils/flags.go#L1158
-[half]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/cmd/utils/flags.go#L1167
-[setcfg]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/cmd/utils/flags.go#L1540
-[backend]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/quai/backend.go#L114
-[max]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/common/fdlimit/fdlimit_darwin.go#L60
-[cap]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/common/fdlimit/fdlimit_darwin.go#L66
-[glob]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/core/rawdb/database.go#L241
-[reindex]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/cmd/utils/hierarchical_coordinator.go#L1427
-[validate]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/cmd/utils/hierarchical_coordinator.go#L1453
-[mismatch]: https://github.com/dominant-strategies/go-quai/blob/v0.57.0/core/rawdb/database.go#L270
+[v0.57.1]: https://github.com/dominant-strategies/go-quai/tree/v0.57.1
+[handles]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/cmd/utils/flags.go#L1158
+[half]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/cmd/utils/flags.go#L1167
+[setcfg]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/cmd/utils/flags.go#L1540
+[backend]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/quai/backend.go#L114
+[max]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/common/fdlimit/fdlimit_darwin.go#L60
+[cap]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/common/fdlimit/fdlimit_darwin.go#L66
+[glob]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/core/rawdb/database.go#L241
+[reindex]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/cmd/utils/hierarchical_coordinator.go#L1427
+[validate]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/cmd/utils/hierarchical_coordinator.go#L1453
+[mismatch]: https://github.com/dominant-strategies/go-quai/blob/v0.57.1/core/rawdb/database.go#L270
